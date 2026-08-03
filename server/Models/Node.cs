@@ -17,7 +17,31 @@ namespace OHL_Wayfinder3D.Models
             Position = new Point3D(x, y, z);
             Floor = floor;
         }
+
+        public IEnumerable<Edge> GetValidNeighbors()
+        {
+            foreach (Edge edge in Neighbors)
+            {
+                if (!edge.IsBlocked)
+                {
+                    yield return edge;
+                }
+            }
+        }
+        private static bool IsObstructed(Node start, Node end, List<Obstacle> obstacles)
+        {
+            foreach (var obstacle in obstacles)
+            {
+                if (obstacle.IntersectsEdge(start, end)) return true;
+            }
+            return false;
+        }
+
+        
+        
     }
+
+
 
     public class Edge
     {
@@ -29,5 +53,8 @@ namespace OHL_Wayfinder3D.Models
             TargetNode = targetNode;
             Weight = weight;
         }
+
+        public bool IsBlocked { get; set; } = false;
+
     }
 }

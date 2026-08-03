@@ -3,45 +3,75 @@ using OHL_Wayfinder3D.Models;
 
 namespace OHL_Wayfinder3D.Services.Pathfinding
 {
-        public class Astar
+
+        public class AstarNode : IPathfindingNode
         {
                 public Node GraphNode { get; }
+                public IPathfindingNode? Parent { get; set; }
                 public double GCost { get; set; } = double.PositiveInfinity;
+                
                 public double HCost { get; set; } = 0;
                 public double FCost => GCost + HCost;
-                public Node? Parent { get; set; } = null;
 
+                public double Distance => GCost;
 
-                public static bool operator <(Node left, Node right)
+                public AstarNode(Node graphNode)
                 {
-                        if (ReferenceEquals(left, null)) return false;
-                        if (ReferenceEquals(right, null)) return true;
-                        
-                        if (left.F_cost == right.F_cost){
-                                return left.H_cost < right.H_cost;
+                        GraphNode = graphNode;
+                }
+
+                public void CalculateHeuristic(Node targetNode)
+                {
+                        var p1 = GraphNode.Position;
+                        var p2 = targetNode.Position;
+
+                        double dx = p1.X - p2.X;
+                        double dy = p1.Y - p2.Y;
+                        double dz = p1.Z - p2.Z;
+
+                        HCost = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+                }
+        }
+        public class AstarSolver
+        {
+                public List<Node> Solve(Node startNode, Node targetNode)
+                {
+                        var nodeMap = new Dictionary<Node, AstarNode>();
+                        AstarNode GetState(Node n) => nodeMap.TryGetValue(n, out var s) ? s : (nodeMap[n] = new AstarNode(n));
+
+                        var openSet = new PriorityQueue<AstarNode, double>();
+                        var closedSet = new HashSet<Node>();
+
+                        var startState = GetState(startNode);
+                        startState.GCost = 0;
+                        startState.CalculateHeuristic(targetNode);
+                        openSet.Enqueue(startState, startState.FCost);
+
+                        while (openSet.Count > 0)
+                        {
+                                var current = openSet.Dequeue();
+                                if (current.GraphNode == targetNode) return PathUtils.ReconstructPath(current);
+
+                                closedSet.Add(current.GraphNode);
+
+                                foreach (Edge edge in current.GraphNode.GetValidNeighbors())
+                                {
+                                        if (closedSet.Contains(edge.TargetNode)) continue;
+
+                                        var neighborState = GetState(edge.TargetNode);
+                                        double newGCost = current.GCost + edge.Weight;
+
+                                        if (newGCost < neighborState.GCost)
+                                        {
+                                                neighborState.Parent = current;
+                                                neighborState.GCost = newGCost;
+                                                neighborState.CalculateHeuristic(targetNode);
+                                                openSet.Enqueue(neighborState, neighborState.FCost);
+                                        }
+                                }
                         }
-                        
-                        return left.F_cost < right.F_cost;
-                }
 
-                private double count_heuristic(List<Node> nodes, string targetId){
-                        Node? targetNode = nodes.Find(n => n.Id == targetId);
-                        if (targetNode == null){
-                                throw new ArgumentException($"Target node with ID '{targetId}' not found in the list.");
-                        }
-                        return Math.Sqrt(Math.Pow(GraphNode.X - targetNode.X, 2) + Math.Pow(GraphNode.Y - targetNode.Y, 2) + Math.Pow(GraphNode.Z - targetNode.Z, 2));
-                }
-
-                private double count_gcost(Node neighbor){
-                        return GCost + GraphNode.Neighbors.Find(e => e.TargetNode == neighbor)?.Weight ?? double.PositiveInfinity;
-                }
-
-
-                public void start_solve(in Node node,string startId,string targetId){
-                       HCost = count_heuristic(node.Neighbors, targetId);
-                       GCost = count_gcost(node);
-                       
-
+                        return new List<Node>(); 
                 }
         }
 }
