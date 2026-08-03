@@ -34,6 +34,8 @@ namespace OHL_Wayfinder3D.Controllers
                     return NotFound(new { message = "Start or Target node not found in the provided graph." });
                 }
 
+                GraphUtils.ApplyObstacles(request.Nodes, request.Obstacles);
+
                 var solver = new BellmanFordSolver();
                 List<Node> path = solver.Solve(request.Nodes, request.Edges, targetNode);
 
@@ -43,11 +45,11 @@ namespace OHL_Wayfinder3D.Controllers
                     Found = path.Count > 0
                 });
             }
-            catch (InvalidOperationException ex) // E.g., Negative weight cycle detected
-            {
-                _logger.LogWarning(ex, "Bellman-Ford failed due to invalid graph state.");
-                return BadRequest(new { message = ex.Message });
-            }
+                catch (InvalidOperationException ex)
+                {
+                    _logger.LogWarning(ex, "Bellman-Ford failed due to invalid graph state.");
+                    return BadRequest(new { message = ex.Message });
+                }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "An error occurred during Bellman-Ford pathfinding execution.");
@@ -70,6 +72,8 @@ namespace OHL_Wayfinder3D.Controllers
                 {
                     return NotFound(new { message = "Start or Target node not found in the provided graph." });
                 }
+
+                GraphUtils.ApplyObstacles(request.Nodes, request.Obstacles);
 
                 var solver = new DijkstraSolver();
                 List<Node> path = solver.Solve(startNode, targetNode);
@@ -102,9 +106,11 @@ namespace OHL_Wayfinder3D.Controllers
                 {
                     return NotFound(new { message = "Start or Target node not found in the provided graph." });
                 }
-
+                GraphUtils.ApplyObstacles(request.Nodes, request.Obstacles);
                 var solver = new AstarSolver();
                 List<Node> path = solver.Solve(startNode, targetNode);
+
+                
 
                 return Ok(new PathfindingResponse
                 {
@@ -117,6 +123,7 @@ namespace OHL_Wayfinder3D.Controllers
                 _logger.LogError(ex, "An error occurred during A* pathfinding execution.");
                 return StatusCode(500, new { message = "An internal error occurred while processing the path request." });
             }
+            
         }
 
         // Shared validation helper
