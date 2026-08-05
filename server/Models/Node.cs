@@ -4,8 +4,6 @@ namespace OHL_Wayfinder3D.Models
     public class Node
     {
         public string Id { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
-        
         public Point3D Position { get; set; } = new Point3D();
         public int Floor { get; set; }
         public Node? Parent { get; set; } = null;

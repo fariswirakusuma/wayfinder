@@ -5,6 +5,8 @@ namespace OHL_Wayfinder3D.Models
     public class Obstacle
     {
         public string Id { get; set; } = string.Empty;
+
+        public string NodeId { get; set; } = string.Empty;
         public Point3D Position { get; set; } = new Point3D();
         public double Width { get; set; }
         public double Height { get; set; }
@@ -43,16 +45,12 @@ namespace OHL_Wayfinder3D.Models
         {
             double tMin = 0.0;
             double tMax = 1.0;
-
-            // Check X axis slab
             if (!ClipAxis(p2.X - p1.X, p1.X - minX, maxX - p1.X, ref tMin, ref tMax))
                 return false;
 
-            // Check Y axis slab
             if (!ClipAxis(p2.Y - p1.Y, p1.Y - minY, maxY - p1.Y, ref tMin, ref tMax))
                 return false;
 
-            // Check Z axis slab
             if (!ClipAxis(p2.Z - p1.Z, p1.Z - minZ, maxZ - p1.Z, ref tMin, ref tMax))
                 return false;
 
