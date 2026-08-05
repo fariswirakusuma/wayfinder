@@ -2,7 +2,21 @@ import adapter from '@sveltejs/adapter-auto';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 
+const backendUrl = (
+	globalThis as typeof globalThis & { process?: { env?: Record<string, string | undefined> } }
+).process?.env?.BACKEND_URL ?? 'http://localhost:5000';
+
 export default defineConfig({
+	server: {
+		proxy: {
+			'/api': backendUrl
+		}
+	},
+	preview: {
+		proxy: {
+			'/api': backendUrl
+		}
+	},
 	plugins: [
 		sveltekit({
 			compilerOptions: {

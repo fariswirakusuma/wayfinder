@@ -16,7 +16,7 @@ export interface PathfindingResponsePayload {
   visitedNodes?: number; 
 }
 
-const API_BASE_URL = 'http://localhost:5000/api/pathfinding';
+const API_BASE_URL = '/api/pathfinding';
 
 export async function solvePath(
   algorithm: 'a-star' | 'dijkstra' | 'bellman-ford',

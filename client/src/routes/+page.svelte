@@ -1,86 +1,103 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import Scene3D from '$lib/components/Scene3D.svelte';
   import ControlsOverlay from '$lib/components/ControlsOverlay.svelte';
-  import type { Node as GraphNode, Edge, Obstacle, PathfindingRequest } from '$lib/three/types';
-  import { MapGenerator3D,type MapType } from '$lib/three/generator/MapGenerator';
+  import { fetchGeneratedMap, type MapType } from '$lib/three/generator/MapGenerator';
   import { solvePath } from '$lib/services/pathfindingApi';
+  import type { Node, Obstacle, PathfindingAlgorithm } from '$lib/three/types';
 
   let width = $state(11);
-  let height = $state(5);
+  let height = $state(1);
   let depth = $state(11);
   let mapType = $state<MapType>('maze');
   let obstacleDensity = $state(0.3);
+  let algorithm = $state<PathfindingAlgorithm>('a-star');
+  let startNodeId = $state('');
+  let targetNodeId = $state('');
+  let nodes = $state<Node[]>([]);
+  let obstacles = $state<Obstacle[]>([]);
+  let path = $state<Node[]>([]);
 
-  let algorithm = $state<'a-star' | 'dijkstra' | 'bellman-ford'>('a-star');
   let isSolving = $state(false);
+  let isLoadingMap = $state(false);
   let executionTime = $state(0);
   let visitedNodes = $state(0);
 
-  // Graph Data
-  let nodes = $state<GraphNode[]>([]);
-  let edges = $state<Edge[]>([]);
-  let obstacles = $state<Obstacle[]>([]);
-  let path = $state<GraphNode[]>([]);
+  async function handleGenerateMap() {
+    try {
+      isLoadingMap = true;
+      path = [];
 
-  let startNodeId = $state('');
-  let targetNodeId = $state('');
+      const data = await fetchGeneratedMap({
+        width,
+        height,
+        depth,
+        mapType,
+        obstacleDensity
+      });
 
-  function handleGenerateMap() {
-    path = [];
-    const generator = new MapGenerator3D(width, height, depth);
-    const mapData = generator.generate(mapType, obstacleDensity);
-
-    nodes = mapData.nodes;
-    edges = mapData.edges;
-    obstacles = mapData.obstacles;
-
-    if (nodes.length > 0) {
-      startNodeId = nodes[0].id;
-      targetNodeId = nodes[nodes.length - 1].id;
-    } else {
-      startNodeId = '';
-      targetNodeId = '';
+      nodes = data.nodes;
+      obstacles = data.obstacles;
+      if (nodes.length > 0) {
+        startNodeId = nodes[0].id;
+        targetNodeId = nodes[nodes.length - 1].id;
+      }
+    } catch (error) {
+      console.error('Error fetching map from backend:', error);
+      alert('Gagal mengambil data peta dari backend .NET. Pastikan server backend sudah berjalan.');
+    } finally {
+      isLoadingMap = false;
     }
   }
 
   async function handleSolve() {
-    if (!startNodeId || !targetNodeId) return;
+    if (!startNodeId || !targetNodeId || nodes.length === 0) return;
 
     isSolving = true;
-    const request: PathfindingRequest = {
-      startNodeId,
-      targetNodeId,
-      nodes,
-      edges,
-      obstacles
-    };
+    const startTime = performance.now();
 
     try {
-      const res = await solvePath(algorithm, request);
-      path = res.found ? res.path : [];
-      executionTime = res.executionTime ?? 0;
-      visitedNodes = res.visitedNodes ?? 0;
+      const data = await solvePath(algorithm, {
+        startNodeId,
+        targetNodeId,
+        nodes,
+        edges: [],
+        obstacles
+      });
 
-      if (!res.found) alert('No path found!');
-    } catch (err) {
-      console.error(err);
+      path = data.path;
+      visitedNodes = data.visitedNodes ?? 0;
+      executionTime = performance.now() - startTime;
+    } catch (error) {
+      console.error('Error solving path:', error);
+      alert('Gagal mengeksekusi pathfinding.');
     } finally {
       isSolving = false;
     }
   }
 
-  // Auto-generate map saat halaman pertama dibuka
-  $effect(() => {
+  onMount(() => {
     handleGenerateMap();
   });
 </script>
 
-<main class="relative w-screen h-screen overflow-hidden bg-slate-950 font-sans text-slate-100">
+<div class="relative w-screen h-screen overflow-hidden bg-slate-950">
+  <!-- Layer Canvas 3D -->
   <div class="absolute inset-0 z-0">
     <Scene3D {nodes} {obstacles} {path} />
   </div>
 
-  <div class="absolute inset-0 z-10 pointer-events-none p-6 flex flex-col justify-between">
+  <!-- Loading State Indicator -->
+  {#if isLoadingMap}
+    <div class="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm pointer-events-none">
+      <div class="flex flex-col items-center gap-3">
+        <div class="w-10 h-10 border-4 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
+        <p class="text-sky-400 font-medium text-sm">Generating 3D Map via .NET Backend...</p>
+      </div>
+    </div>
+  {/if}
+
+  <div class="absolute inset-0 z-10 pointer-events-none p-4">
     <ControlsOverlay
       bind:width
       bind:height
@@ -92,24 +109,11 @@
       bind:targetNodeId
       {nodes}
       {isSolving}
+      {isLoadingMap}
       {executionTime}
       {visitedNodes}
       onGenerate={handleGenerateMap}
       onSolve={handleSolve}
     />
-
-    {#if path.length > 0}
-      <div class="pointer-events-auto self-start bg-slate-900/80 backdrop-blur-md border border-slate-800 p-4 rounded-xl shadow-2xl flex items-center gap-6">
-        <div>
-          <span class="text-xs text-slate-400 block uppercase tracking-wider font-semibold">Nodes in Path</span>
-          <span class="text-lg font-bold text-emerald-400">{path.length}</span>
-        </div>
-        <div class="h-8 w-px bg-slate-800"></div>
-        <div>
-          <span class="text-xs text-slate-400 block uppercase tracking-wider font-semibold">Algorithm</span>
-          <span class="text-lg font-bold text-indigo-400 uppercase">{algorithm}</span>
-        </div>
-      </div>
-    {/if}
   </div>
-</main>
+</div>

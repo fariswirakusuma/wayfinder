@@ -17,14 +17,14 @@ namespace OHL_Wayfinder3D.Services.Pathfinding
 
     public class BellmanFordSolver
     {
-        public List<Node> Solve(List<Node> allNodes, List<Edge> allEdges,Node targetNode)
+        public List<Node> Solve(List<Node> allNodes, Node startNode, Node targetNode)
         {
 
             var nodeMap = allNodes.ToDictionary(
                 n => n, 
                 n => new BellmanFordNode(n)
             );
-            
+            nodeMap[startNode].Distance = 0;
            
 
             for (int i = 0; i < allNodes.Count - 1; i++)

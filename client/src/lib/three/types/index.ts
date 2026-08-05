@@ -7,6 +7,8 @@ export * from './Node';
 export * from './Edge';
 export * from './Obstacle'; 
 
+export type PathfindingAlgorithm = 'a-star' | 'dijkstra' | 'bellman-ford';
+
 export interface PathfindingRequest {
   startNodeId: string;
   targetNodeId: string;

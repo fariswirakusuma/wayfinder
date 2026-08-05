@@ -1,4 +1,6 @@
 
+using System.Text.Json.Serialization;
+
 namespace OHL_Wayfinder3D.Models
 {
     public class Node
@@ -7,7 +9,13 @@ namespace OHL_Wayfinder3D.Models
         public Point3D Position { get; set; } = new Point3D();
         public int Floor { get; set; }
         public Node? Parent { get; set; } = null;
+        // Neighbors contain back-references to other nodes. The backend
+        // reconstructs them from node positions for pathfinding requests, so
+        // keeping them out of the HTTP payload prevents circular JSON.
+        [JsonIgnore]
         public List<Edge> Neighbors { get; set; } = new();
+
+        public Node() { }
 
         public Node(string id, double x, double y, double z, int floor = 1)
         {

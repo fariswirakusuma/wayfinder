@@ -23,6 +23,7 @@ namespace OHL_Wayfinder3D.Controllers
         {
             var validationResult = ValidateRequest(request);
             if (validationResult != null) return validationResult;
+            BuildGraph(request.Nodes, request.Obstacles);
 
             try
             {
@@ -34,10 +35,8 @@ namespace OHL_Wayfinder3D.Controllers
                     return NotFound(new { message = "Start or Target node not found in the provided graph." });
                 }
 
-                GraphUtils.ApplyObstacles(request.Nodes, request.Obstacles);
-
                 var solver = new BellmanFordSolver();
-                List<Node> path = solver.Solve(request.Nodes, request.Edges, targetNode);
+                List<Node> path = solver.Solve(request.Nodes, startNode, targetNode);
 
                 return Ok(new PathfindingResponse
                 {
@@ -62,6 +61,7 @@ namespace OHL_Wayfinder3D.Controllers
         {
             var validationResult = ValidateRequest(request);
             if (validationResult != null) return validationResult;
+            BuildGraph(request.Nodes, request.Obstacles);
 
             try
             {
@@ -72,8 +72,6 @@ namespace OHL_Wayfinder3D.Controllers
                 {
                     return NotFound(new { message = "Start or Target node not found in the provided graph." });
                 }
-
-                GraphUtils.ApplyObstacles(request.Nodes, request.Obstacles);
 
                 var solver = new DijkstraSolver();
                 List<Node> path = solver.Solve(startNode, targetNode);
@@ -96,6 +94,7 @@ namespace OHL_Wayfinder3D.Controllers
         {
             var validationResult = ValidateRequest(request);
             if (validationResult != null) return validationResult;
+            BuildGraph(request.Nodes, request.Obstacles);
 
             try
             {
@@ -106,7 +105,6 @@ namespace OHL_Wayfinder3D.Controllers
                 {
                     return NotFound(new { message = "Start or Target node not found in the provided graph." });
                 }
-                GraphUtils.ApplyObstacles(request.Nodes, request.Obstacles);
                 var solver = new AstarSolver();
                 List<Node> path = solver.Solve(startNode, targetNode);
 
@@ -145,6 +143,46 @@ namespace OHL_Wayfinder3D.Controllers
             }
 
             return null;
+        }
+
+        private static void BuildGraph(List<Node> nodes, List<Obstacle> obstacles)
+        {
+            foreach (var node in nodes)
+            {
+                node.Neighbors.Clear();
+            }
+
+            const double tolerance = 0.0001;
+            var gridSpacing = obstacles.FirstOrDefault()?.Width ?? FindMinimumNodeDistance(nodes);
+            for (var i = 0; i < nodes.Count; i++)
+            {
+                for (var j = i + 1; j < nodes.Count; j++)
+                {
+                    var first = nodes[i];
+                    var second = nodes[j];
+                    var dx = Math.Abs(first.Position.X - second.Position.X);
+                    var dy = Math.Abs(first.Position.Y - second.Position.Y);
+                    var dz = Math.Abs(first.Position.Z - second.Position.Z);
+                    var changedAxes = (dx > tolerance ? 1 : 0) + (dy > tolerance ? 1 : 0) + (dz > tolerance ? 1 : 0);
+
+                    if (changedAxes != 1) continue;
+
+                    var distance = dx + dy + dz;
+                    if (Math.Abs(distance - gridSpacing) > tolerance) continue;
+
+                    first.Neighbors.Add(new Edge(second, distance));
+                    second.Neighbors.Add(new Edge(first, distance));
+                }
+            }
+        }
+
+        private static double FindMinimumNodeDistance(List<Node> nodes)
+        {
+            return nodes
+                .SelectMany((node, index) => nodes.Skip(index + 1).Select(other => node.Position.DistanceTo(other.Position)))
+                .Where(distance => distance > 0)
+                .DefaultIfEmpty(0)
+                .Min();
         }
     }
 }

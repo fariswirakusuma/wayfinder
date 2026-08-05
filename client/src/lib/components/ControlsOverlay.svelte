@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { MapType } from '$lib/three/generator/MapGenerator';
-  import type { Node as GraphNode } from '$lib/three/types';
+  import type { Node as GraphNode, PathfindingAlgorithm } from '$lib/three/types';
 
   let {
     width = $bindable(11),
@@ -8,11 +8,12 @@
     depth = $bindable(11),
     mapType = $bindable<MapType>('maze'),
     obstacleDensity = $bindable(0.3),
-    algorithm = $bindable<'a-star' | 'dijkstra' | 'bellman-ford'>('a-star'),
+    algorithm = $bindable<PathfindingAlgorithm>('a-star'),
     startNodeId = $bindable(''),
     targetNodeId = $bindable(''),
     nodes = [],
     isSolving = false,
+    isLoadingMap = false,
     executionTime = 0,
     visitedNodes = 0,
     onGenerate = () => {},
@@ -23,15 +24,16 @@
     depth?: number;
     mapType?: MapType;
     obstacleDensity?: number;
-    algorithm?: 'a-star' | 'dijkstra' | 'bellman-ford';
+    algorithm?: PathfindingAlgorithm;
     startNodeId?: string;
     targetNodeId?: string;
     nodes?: GraphNode[];
     isSolving?: boolean;
+    isLoadingMap?: boolean;
     executionTime?: number;
     visitedNodes?: number;
-    onGenerate?: (event: MouseEvent) => void;
-    onSolve?: (event: MouseEvent) => void;
+    onGenerate?: () => void | Promise<void>;
+    onSolve?: () => void | Promise<void>;
   } = $props();
 </script>
 
@@ -60,7 +62,6 @@
     </div>
   {/if}
 
-  <!-- Dimensi Ukuran Map -->
   <div class="form-group">
     <label for="width">Width (X): {width}</label>
     <input type="range" id="width" min="5" max="25" step="2" bind:value={width} />
@@ -94,7 +95,6 @@
     </select>
   </div>
 
-  <!-- Pemilihan Algoritma Pathfinding Backend -->
   <div class="form-group">
     <label for="algo">Algorithm:</label>
     <select id="algo" bind:value={algorithm}>
@@ -105,10 +105,10 @@
   </div>
 
   <div class="button-group">
-    <button class="btn btn-secondary" onclick={onGenerate} disabled={isSolving}>
-      Randomize Map
+    <button type="button" class="btn btn-secondary" onclick={() => void onGenerate()} disabled={isSolving || isLoadingMap}>
+      {isLoadingMap ? 'Generating...' : 'Randomize Map'}
     </button>
-    <button class="btn btn-primary" onclick={onSolve} disabled={isSolving}>
+    <button type="button" class="btn btn-primary" onclick={() => void onSolve()} disabled={isSolving || isLoadingMap || !startNodeId || !targetNodeId}>
       {isSolving ? 'Solving...' : 'Find Path'}
     </button>
   </div>
