@@ -1,0 +1,206 @@
+<script lang="ts">
+  import type { MapType } from '$lib/three/generator/MapGenerator';
+  import type { Node as GraphNode } from '$lib/three/types';
+
+  let {
+    width = $bindable(11),
+    height = $bindable(5),
+    depth = $bindable(11),
+    mapType = $bindable<MapType>('maze'),
+    obstacleDensity = $bindable(0.3),
+    algorithm = $bindable<'a-star' | 'dijkstra' | 'bellman-ford'>('a-star'),
+    startNodeId = $bindable(''),
+    targetNodeId = $bindable(''),
+    nodes = [],
+    isSolving = false,
+    executionTime = 0,
+    visitedNodes = 0,
+    onGenerate = () => {},
+    onSolve = () => {}
+  }: {
+    width?: number;
+    height?: number;
+    depth?: number;
+    mapType?: MapType;
+    obstacleDensity?: number;
+    algorithm?: 'a-star' | 'dijkstra' | 'bellman-ford';
+    startNodeId?: string;
+    targetNodeId?: string;
+    nodes?: GraphNode[];
+    isSolving?: boolean;
+    executionTime?: number;
+    visitedNodes?: number;
+    onGenerate?: (event: MouseEvent) => void;
+    onSolve?: (event: MouseEvent) => void;
+  } = $props();
+</script>
+
+<div class="controls-panel pointer-events-auto">
+  <h2>OHL Wayfinder 3D</h2>
+
+  <div class="form-group">
+    <label for="mapType">Generator Type:</label>
+    <select id="mapType" bind:value={mapType}>
+      <option value="maze">3D Maze (DFS)</option>
+      <option value="random">Random Obstacles</option>
+    </select>
+  </div>
+
+  {#if mapType === 'random'}
+    <div class="form-group">
+      <label for="density">Obstacle Density: {Math.round(obstacleDensity * 100)}%</label>
+      <input
+        type="range"
+        id="density"
+        min="0.1"
+        max="0.6"
+        step="0.05"
+        bind:value={obstacleDensity}
+      />
+    </div>
+  {/if}
+
+  <!-- Dimensi Ukuran Map -->
+  <div class="form-group">
+    <label for="width">Width (X): {width}</label>
+    <input type="range" id="width" min="5" max="25" step="2" bind:value={width} />
+  </div>
+
+  <div class="form-group">
+    <label for="height">Height / Floors (Y): {height}</label>
+    <input type="range" id="height" min="1" max="11" step="2" bind:value={height} />
+  </div>
+
+  <div class="form-group">
+    <label for="depth">Depth (Z): {depth}</label>
+    <input type="range" id="depth" min="5" max="25" step="2" bind:value={depth} />
+  </div>
+
+  <div class="form-group">
+    <label for="startNode">Start Node:</label>
+    <select id="startNode" bind:value={startNodeId}>
+      {#each nodes as node (node.id)}
+        <option value={node.id}>{node.id} ({node.position.x}, {node.position.y}, {node.position.z})</option>
+      {/each}
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label for="targetNode">Target Node:</label>
+    <select id="targetNode" bind:value={targetNodeId}>
+      {#each nodes as node (node.id)}
+        <option value={node.id}>{node.id} ({node.position.x}, {node.position.y}, {node.position.z})</option>
+      {/each}
+    </select>
+  </div>
+
+  <!-- Pemilihan Algoritma Pathfinding Backend -->
+  <div class="form-group">
+    <label for="algo">Algorithm:</label>
+    <select id="algo" bind:value={algorithm}>
+      <option value="a-star">A* (A-Star)</option>
+      <option value="dijkstra">Dijkstra</option>
+      <option value="bellman-ford">Bellman-Ford</option>
+    </select>
+  </div>
+
+  <div class="button-group">
+    <button class="btn btn-secondary" onclick={onGenerate} disabled={isSolving}>
+      Randomize Map
+    </button>
+    <button class="btn btn-primary" onclick={onSolve} disabled={isSolving}>
+      {isSolving ? 'Solving...' : 'Find Path'}
+    </button>
+  </div>
+
+  {#if executionTime > 0}
+    <div class="stats-box">
+      <p><strong>Execution Time:</strong> {executionTime.toFixed(2)} ms</p>
+      <p><strong>Visited Nodes:</strong> {visitedNodes}</p>
+    </div>
+  {/if}
+</div>
+
+<style>
+  .controls-panel {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    z-index: 10;
+    width: 280px;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    padding: 18px;
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    color: #f8fafc;
+    font-family: system-ui, -apple-system, sans-serif;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.36);
+  }
+
+  h2 {
+    margin: 0 0 16px 0;
+    font-size: 1.2rem;
+    color: #38bdf8;
+  }
+
+  .form-group {
+    margin-bottom: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.85rem;
+  }
+
+  input[type='range'], select {
+    width: 100%;
+    padding: 6px;
+    border-radius: 6px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    color: #fff;
+  }
+
+  .button-group {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+  }
+
+  .btn {
+    flex: 1;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background: #0284c7;
+    color: white;
+  }
+  .btn-primary:hover:not(:disabled) { background: #0369a1; }
+
+  .btn-secondary {
+    background: #475569;
+    color: white;
+  }
+  .btn-secondary:hover:not(:disabled) { background: #334155; }
+
+  .stats-box {
+    margin-top: 14px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    font-size: 0.8rem;
+  }
+</style>
