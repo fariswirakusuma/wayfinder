@@ -84,7 +84,7 @@
 <div class="relative w-screen h-screen overflow-hidden bg-slate-950">
   <!-- Layer Canvas 3D -->
   <div class="absolute inset-0 z-0">
-    <Scene3D {nodes} {obstacles} {path} />
+    <Scene3D {nodes} {obstacles} {path} {startNodeId} {targetNodeId} />
   </div>
 
   <!-- Loading State Indicator -->

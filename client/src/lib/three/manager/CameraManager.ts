@@ -46,7 +46,6 @@ export class CameraManager {
     this.followOffset.copy(offset);
   }
 
-  // --- Wajib dipanggil setiap Frame di Animation Loop (`animate()`) ---
   public update() {
     if (this.mode === CameraMode.FOLLOW_NODE && this.targetNode) {
       // 1. Hitung posisi kamera yang diinginkan

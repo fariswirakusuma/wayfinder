@@ -7,12 +7,16 @@
     nodes?: GraphNode[];
     obstacles?: Obstacle[];
     path?: GraphNode[];
+    startNodeId?: string;
+    targetNodeId?: string;
   }
 
   let {
     nodes = [],
     obstacles = [],
-    path = []
+    path = [],
+    startNodeId = '',
+    targetNodeId = ''
   }: Scene3DProps = $props();
 
   let containerElement: HTMLDivElement;
@@ -33,7 +37,7 @@
   $effect(() => {
     if (sceneManager) {
       if (typeof sceneManager.renderGraph === 'function') {
-        sceneManager.renderGraph(nodes, obstacles);
+        sceneManager.renderGraph(nodes, obstacles, startNodeId, targetNodeId);
       }
       if (typeof sceneManager.renderPath === 'function') {
         sceneManager.renderPath(path);

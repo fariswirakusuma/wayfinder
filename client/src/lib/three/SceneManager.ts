@@ -14,10 +14,13 @@ export class SceneManager {
   private obstaclesGroup: THREE.Group;
   private pathGroup: THREE.Group;
 
+  private startNodeLight: THREE.PointLight;
+  private targetNodeLight: THREE.PointLight;
+
   constructor(container: HTMLElement) {
     this.container = container;
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0a0f1d); // Darker cyber background
+    this.scene.background = new THREE.Color(0x0a0f1d);
 
     this.camera = new THREE.PerspectiveCamera(
       60,
@@ -34,7 +37,10 @@ export class SceneManager {
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
     const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
     dirLight.position.set(20, 40, 20);
-    this.scene.add(ambientLight, dirLight);
+
+    this.startNodeLight = new THREE.PointLight(0x22c55e, 2.0, 10);
+    this.targetNodeLight = new THREE.PointLight(0xef4444, 2.0, 10);
+    this.scene.add(ambientLight, dirLight, this.startNodeLight, this.targetNodeLight);
 
     this.cameraManager = new CameraManager(this.camera, this.renderer.domElement);
 
@@ -48,49 +54,72 @@ export class SceneManager {
     this.animate();
   }
 
-  // Optimize dengan InstancedMesh untuk performa maksimal
-  public renderGraph(nodes: GraphNode[], obstacles: Obstacle[]) {
-  this.clearGroup(this.nodesGroup);
-  this.clearGroup(this.obstaclesGroup);
+  public renderGraph(
+    nodes: GraphNode[],
+    obstacles: Obstacle[],
+    startNodeId?: string,
+    targetNodeId?: string
+  ) {
+    this.clearGroup(this.nodesGroup);
+    this.clearGroup(this.obstaclesGroup);
 
-  if (obstacles.length > 0) {
-    // Gunakan unit box 1x1x1 sebagai dasar geometri
-    const boxGeo = new THREE.BoxGeometry(1, 1, 1);
-    const boxMat = new THREE.MeshStandardMaterial({ color: 0x334155 });
-    
-    const obstacleInstanced = new THREE.InstancedMesh(boxGeo, boxMat, obstacles.length);
-    const dummy = new THREE.Object3D();
+    // 1. Render Obstacles
+    if (obstacles.length > 0) {
+      const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+      const boxMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.4 });
+      
+      const obstacleInstanced = new THREE.InstancedMesh(boxGeo, boxMat, obstacles.length);
+      const dummy = new THREE.Object3D();
 
-    obstacles.forEach((obs, i) => {
-      dummy.position.set(obs.position.x, obs.position.y, obs.position.z);
-      // Skala Y menggunakan obs.height (tinggi dinding saja)
-      dummy.scale.set(obs.width || 1, obs.height || 1, obs.depth || 1);
-      dummy.updateMatrix();
-      obstacleInstanced.setMatrixAt(i, dummy.matrix);
-    });
-    
-    obstacleInstanced.instanceMatrix.needsUpdate = true;
-    this.obstaclesGroup.add(obstacleInstanced);
+      obstacles.forEach((obs, i) => {
+        dummy.position.set(obs.position.x, obs.position.y, obs.position.z);
+        dummy.scale.set(obs.width || 1, obs.height || 1, obs.depth || 1);
+        dummy.updateMatrix();
+        obstacleInstanced.setMatrixAt(i, dummy.matrix);
+      });
+      
+      obstacleInstanced.instanceMatrix.needsUpdate = true;
+      this.obstaclesGroup.add(obstacleInstanced);
+    }
+
+    // 2. Render Nodes
+    if (nodes.length > 0) {
+      const nodeGeo = new THREE.SphereGeometry(0.15, 16, 16);
+      const nodeMat = new THREE.MeshStandardMaterial({ roughness: 0.2 });
+      const nodeInstanced = new THREE.InstancedMesh(nodeGeo, nodeMat, nodes.length);
+      const dummy = new THREE.Object3D();
+
+      const defaultColor = new THREE.Color(0x38bdf8);
+      const startColor = new THREE.Color(0x22c55e);
+      const targetColor = new THREE.Color(0xef4444);
+
+      nodes.forEach((node, i) => {
+        dummy.position.set(node.position.x, node.position.y, node.position.z);
+
+        if (node.id === startNodeId) {
+          nodeInstanced.setColorAt(i, startColor);
+          dummy.scale.set(1.8, 1.8, 1.8);
+          this.startNodeLight.position.set(node.position.x, node.position.y + 0.5, node.position.z);
+        } else if (node.id === targetNodeId) {
+          nodeInstanced.setColorAt(i, targetColor);
+          dummy.scale.set(1.8, 1.8, 1.8);
+          this.targetNodeLight.position.set(node.position.x, node.position.y + 0.5, node.position.z);
+        } else {
+          nodeInstanced.setColorAt(i, defaultColor);
+          dummy.scale.set(1.0, 1.0, 1.0);
+        }
+
+        dummy.updateMatrix();
+        nodeInstanced.setMatrixAt(i, dummy.matrix);
+      });
+
+      nodeInstanced.instanceMatrix.needsUpdate = true;
+      if (nodeInstanced.instanceColor) {
+        nodeInstanced.instanceColor.needsUpdate = true;
+      }
+      this.nodesGroup.add(nodeInstanced);
+    }
   }
-
-  // Render nodes (lorong jalan) hanya di permukaan tanah
-  if (nodes.length > 0) {
-    const nodeGeo = new THREE.SphereGeometry(0.15, 8, 8);
-    const nodeMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
-    const nodeInstanced = new THREE.InstancedMesh(nodeGeo, nodeMat, nodes.length);
-    const dummy = new THREE.Object3D();
-
-    nodes.forEach((node, i) => {
-      dummy.position.set(node.position.x, node.position.y, node.position.z);
-      dummy.updateMatrix();
-      nodeInstanced.setMatrixAt(i, dummy.matrix);
-    });
-
-    nodeInstanced.instanceMatrix.needsUpdate = true;
-    this.nodesGroup.add(nodeInstanced);
-  }
-}
-
 
   public renderPath(path: GraphNode[]) {
     this.clearGroup(this.pathGroup);
@@ -121,6 +150,13 @@ export class SceneManager {
       const obj = group.children[0];
       if (obj instanceof THREE.Mesh || obj instanceof THREE.InstancedMesh || obj instanceof THREE.Line) {
         if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) {
+          if (Array.isArray(obj.material)) {
+            obj.material.forEach((mat) => mat.dispose());
+          } else {
+            obj.material.dispose();
+          }
+        }
       }
       group.remove(obj);
     }
