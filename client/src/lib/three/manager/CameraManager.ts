@@ -48,24 +48,19 @@ export class CameraManager {
 
   public update() {
     if (this.mode === CameraMode.FOLLOW_NODE && this.targetNode) {
-      // 1. Hitung posisi kamera yang diinginkan
       this.tempDesiredPos.copy(this.targetNode.position).add(this.followOffset);
       this.camera.position.lerp(this.tempDesiredPos, 0.1);
 
-      // 2. Sync OrbitControls target dengan node position
       this.controls.target.lerp(this.targetNode.position, 0.1);
       this.controls.update();
 
     } else if (this.mode === CameraMode.DEFAULT_TOP_VIEW) {
-      // 1. Lerp ke posisi Top View
       this.camera.position.lerp(this.defaultTopPos, 0.1);
 
-      // 2. Lerp target OrbitControls ke pusat (0,0,0)
       this.controls.target.lerp(this.defaultTargetPos, 0.1);
       this.controls.update();
 
     } else if (this.mode === CameraMode.FREE_ORBIT) {
-      // Bebas digerakkan manual via OrbitControls
       this.controls.update();
     }
   }

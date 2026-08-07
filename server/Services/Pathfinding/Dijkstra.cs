@@ -53,5 +53,14 @@ namespace OHL_Wayfinder3D.Services.Pathfinding
 
                         return new List<Node>(); 
                 }
+                public Dictionary<string, List<Node>> GetGraphData(List<Node> allNodes)
+                {
+                        var graphData = new Dictionary<string, List<Node>>();
+                        foreach (var node in allNodes)
+                        {
+                                graphData[node.Id] = node.GetValidNeighbors().Select(edge => edge.TargetNode).ToList();
+                        }
+                        return graphData;
+                }
         }
 }

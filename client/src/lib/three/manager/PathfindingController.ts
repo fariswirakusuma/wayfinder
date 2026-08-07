@@ -1,6 +1,15 @@
-// Managing active selection IDs
 import { NodeManager } from './NodeManager';
 import { CameraManager } from './CameraManager';
+import type { Node, Point3D } from '../types';
+
+export interface PathfindingStepState {
+  currentNode: Node;
+  openList?: Node[];
+  closedList?: Set<string>;
+  distances?: Map<string, number>;
+  parentMap: Map<string, string>; 
+  pathFound?: Node[];
+}
 
 export class PathfindingController {
   public startNodeId: string | null = null;
@@ -34,5 +43,178 @@ export class PathfindingController {
 
     this.targetNodeId = nodeId;
     this.nodeManager.highlightNode(nodeId, 'target');
+  }
+  private getDistance(a: Point3D, b: Point3D): number {
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    const dz = a.z - b.z;
+    return Math.sqrt(dx * dx + dy * dy + dz * dz);
+  }
+  public async *solveAStarStepByStep(
+    startNode: Node,
+    targetNode: Node,
+    nodesMap: Map<string, Node>,
+    graphMap: Record<string, string[]>
+  ): AsyncGenerator<PathfindingStepState> {
+    const openList: Node[] = [startNode];
+    const closedList = new Set<string>();
+    const parentMap = new Map<string, string>();
+    const gScore = new Map<string, number>();
+    const fScore = new Map<string, number>();
+
+    gScore.set(startNode.id, 0);
+    fScore.set(startNode.id, this.heuristic(startNode, targetNode));
+
+    while (openList.length > 0) {
+      openList.sort((a, b) => (fScore.get(a.id) ?? Infinity) - (fScore.get(b.id) ?? Infinity));
+      const current = openList.shift()!;
+
+      if (current.id === targetNode.id) {
+        const path = this.reconstructPath(parentMap, current, nodesMap);
+        yield { currentNode: current, openList, closedList, parentMap, pathFound: path };
+        return;
+      }
+
+      closedList.add(current.id);
+
+      const neighborIds = graphMap[current.id] || [];
+      for (const neighborId of neighborIds) {
+        const neighbor = nodesMap.get(neighborId);
+        if (!neighbor || closedList.has(neighbor.id)) continue;
+
+        const tentativeG = (gScore.get(current.id) ?? Infinity) + this.getDistance(current.position, neighbor.position);
+
+        if (tentativeG < (gScore.get(neighbor.id) ?? Infinity)) {
+          parentMap.set(neighbor.id, current.id);
+          gScore.set(neighbor.id, tentativeG);
+          fScore.set(neighbor.id, tentativeG + this.heuristic(neighbor, targetNode));
+
+          if (!openList.some((n) => n.id === neighbor.id)) {
+            openList.push(neighbor);
+          }
+        }
+      }
+
+      yield { currentNode: current, openList, closedList, parentMap };
+    }
+  }
+  public async *solveDijkstraStepByStep(
+    startNode: Node,
+    targetNode: Node,
+    nodesMap: Map<string, Node>,
+    graphMap: Record<string, string[]>
+  ): AsyncGenerator<PathfindingStepState> {
+    const distances = new Map<string, number>();
+    const parentMap = new Map<string, string>();
+    const unvisited = new Set<string>();
+
+    nodesMap.forEach((_, id) => {
+      distances.set(id, Infinity);
+      unvisited.add(id);
+    });
+
+    distances.set(startNode.id, 0);
+
+    while (unvisited.size > 0) {
+      let currentId: string | null = null;
+      let minDistance = Infinity;
+
+      for (const id of unvisited) {
+        const dist = distances.get(id) ?? Infinity;
+        if (dist < minDistance) {
+          minDistance = dist;
+          currentId = id;
+        }
+      }
+
+      if (!currentId || minDistance === Infinity) break;
+
+      const current = nodesMap.get(currentId)!;
+      unvisited.delete(currentId);
+
+      if (current.id === targetNode.id) {
+        const path = this.reconstructPath(parentMap, current, nodesMap);
+        yield { currentNode: current, distances, parentMap, pathFound: path };
+        return;
+      }
+
+      const neighborIds = graphMap[current.id] || [];
+      for (const neighborId of neighborIds) {
+        if (!unvisited.has(neighborId)) continue;
+
+        const neighbor = nodesMap.get(neighborId);
+        if (!neighbor) continue;
+
+        const alt = minDistance + this.getDistance(current.position, neighbor.position);
+        if (alt < (distances.get(neighborId) ?? Infinity)) {
+          distances.set(neighborId, alt);
+          parentMap.set(neighborId, current.id);
+        }
+      }
+
+      yield { currentNode: current, distances, parentMap };
+    }
+  }
+  public async *solveBellmanFordStepByStep(
+    startNode: Node,
+    targetNode: Node,
+    nodesMap: Map<string, Node>,
+    graphMap: Record<string, string[]>
+  ): AsyncGenerator<PathfindingStepState> {
+    const distances = new Map<string, number>();
+    const parentMap = new Map<string, string>();
+
+    nodesMap.forEach((_, id) => distances.set(id, Infinity));
+    distances.set(startNode.id, 0);
+
+    const totalNodes = nodesMap.size;
+
+    for (let i = 0; i < totalNodes - 1; i++) {
+      let updatedInThisIteration = false;
+
+      for (const [uId, neighborIds] of Object.entries(graphMap)) {
+        const uNode = nodesMap.get(uId);
+        const distU = distances.get(uId) ?? Infinity;
+
+        if (!uNode || distU === Infinity) continue;
+
+        for (const vId of neighborIds) {
+          const vNode = nodesMap.get(vId);
+          if (!vNode) continue;
+
+          const weight = this.getDistance(uNode.position, vNode.position);
+          if (distU + weight < (distances.get(vId) ?? Infinity)) {
+            distances.set(vId, distU + weight);
+            parentMap.set(vId, uId);
+            updatedInThisIteration = true;
+
+            yield { currentNode: vNode, distances, parentMap };
+          }
+        }
+      }
+
+      if (!updatedInThisIteration) break;
+    }
+
+    const target = nodesMap.get(targetNode.id);
+    if (target && distances.get(targetNode.id) !== Infinity) {
+      const path = this.reconstructPath(parentMap, target, nodesMap);
+      yield { currentNode: target, distances, parentMap, pathFound: path };
+    }
+  }
+
+  private heuristic(a: Node, b: Node): number {
+    return this.getDistance(a.position, b.position);
+  }
+
+  private reconstructPath(parentMap: Map<string, string>, current: Node, nodesMap: Map<string, Node>): Node[] {
+    const path: Node[] = [current];
+    let currId = current.id;
+    while (parentMap.has(currId)) {
+      currId = parentMap.get(currId)!;
+      const parentNode = nodesMap.get(currId);
+      if (parentNode) path.unshift(parentNode);
+    }
+    return path;
   }
 }

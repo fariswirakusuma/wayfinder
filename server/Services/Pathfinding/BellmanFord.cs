@@ -67,5 +67,26 @@ namespace OHL_Wayfinder3D.Services.Pathfinding
 
             return PathUtils.ReconstructPath(targetState);
         }
+        public Dictionary<string, List<Node>> GetGraphData(List<Node> allNodes)
+        {
+            var graphMap = new Dictionary<string, List<Node>>();
+
+            foreach (var node in allNodes)
+            {
+                if (node.Neighbors != null)
+                {
+                    graphMap[node.Id] = node.Neighbors
+                        .Where(edge => edge.TargetNode != null)
+                        .Select(edge => edge.TargetNode)
+                        .ToList();
+                }
+                else
+                {
+                    graphMap[node.Id] = new List<Node>();
+                }
+            }
+
+            return graphMap;
+        }
     }
 }

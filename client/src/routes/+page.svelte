@@ -14,19 +14,28 @@
   let algorithm = $state<PathfindingAlgorithm>('a-star');
   let startNodeId = $state('');
   let targetNodeId = $state('');
+  let animationSpeedMs = $state(50);
+
   let nodes = $state<Node[]>([]);
   let obstacles = $state<Obstacle[]>([]);
   let path = $state<Node[]>([]);
 
   let isSolving = $state(false);
   let isLoadingMap = $state(false);
+  let isExecutingStepByStep = $state(false);
   let executionTime = $state(0);
   let visitedNodes = $state(0);
+
+  // Sesuaikan interface referensi Scene3D
+  let scene3dRef = $state<{
+    resetHighlight: () => void;
+    runStepByStepAnimation: () => Promise<void>;
+  } | null>(null);
 
   async function handleGenerateMap() {
     try {
       isLoadingMap = true;
-      path = [];
+      handleClear();
 
       const data = await fetchGeneratedMap({
         width,
@@ -50,11 +59,11 @@
     }
   }
 
-  async function handleSolve() {
-    if (!startNodeId || !targetNodeId || nodes.length === 0) return;
+  async function handleInstantSolve() {
+    if (!startNodeId || !targetNodeId || nodes.length === 0 || isExecutingStepByStep) return;
 
     isSolving = true;
-    const startTime = performance.now();
+    handleClear();
 
     try {
       const data = await solvePath(algorithm, {
@@ -67,12 +76,35 @@
 
       path = data.path;
       visitedNodes = data.visitedNodes ?? 0;
-      executionTime = performance.now() - startTime;
+      executionTime = data.executionTime ?? 0;
     } catch (error) {
       console.error('Error solving path:', error);
       alert('Gagal mengeksekusi pathfinding.');
     } finally {
       isSolving = false;
+    }
+  }
+  async function handleRunStepByStep() {
+    if (!scene3dRef || isExecutingStepByStep) return;
+
+    isExecutingStepByStep = true;
+    try {
+      await scene3dRef.runStepByStepAnimation();
+    } catch (error) {
+      console.error('Error running step by step animation:', error);
+    } finally {
+      isExecutingStepByStep = false;
+    }
+  }
+
+  function handleClear() {
+    isExecutingStepByStep = false;
+    path = [];
+    executionTime = 0;
+    visitedNodes = 0;
+
+    if (scene3dRef?.resetHighlight) {
+      scene3dRef.resetHighlight();
     }
   }
 
@@ -82,12 +114,19 @@
 </script>
 
 <div class="relative w-screen h-screen overflow-hidden bg-slate-950">
-  <!-- Layer Canvas 3D -->
-  <div class="absolute inset-0 z-0">
-    <Scene3D {nodes} {obstacles} {path} {startNodeId} {targetNodeId} />
-  </div>
 
-  <!-- Loading State Indicator -->
+  <div class="absolute inset-0 z-0">
+    <Scene3D
+      bind:this={scene3dRef}
+      {nodes}
+      {obstacles}
+      {path}
+      {startNodeId}
+      {targetNodeId}
+      {algorithm}
+      {animationSpeedMs}
+    />
+  </div>
   {#if isLoadingMap}
     <div class="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm pointer-events-none">
       <div class="flex flex-col items-center gap-3">
@@ -107,13 +146,17 @@
       bind:algorithm
       bind:startNodeId
       bind:targetNodeId
+      bind:animationSpeedMs
+      bind:isExecutingStepByStep
       {nodes}
       {isSolving}
       {isLoadingMap}
       {executionTime}
       {visitedNodes}
       onGenerate={handleGenerateMap}
-      onSolve={handleSolve}
+      onSolve={handleInstantSolve}
+      onRunStepByStep={handleRunStepByStep}
+      onClear={handleClear}
     />
   </div>
 </div>

@@ -1,18 +1,22 @@
 import * as THREE from 'three';
 import { CameraManager } from './manager/CameraManager.js';
 import type { Node as GraphNode, Obstacle } from './types';
+import type { PathfindingStepState } from './manager/PathfindingController';
+import { NodeManager } from './manager/NodeManager.js';
 
 export class SceneManager {
   private container: HTMLElement;
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer;
-  private cameraManager: CameraManager;
+  public cameraManager: CameraManager;
   private animFrameId: number | null = null;
 
   private nodesGroup: THREE.Group;
   private obstaclesGroup: THREE.Group;
   private pathGroup: THREE.Group;
+  private arrowsGroup: THREE.Group;
+  public nodeManager: NodeManager;
 
   private startNodeLight: THREE.PointLight;
   private targetNodeLight: THREE.PointLight;
@@ -21,6 +25,8 @@ export class SceneManager {
     this.container = container;
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0a0f1d);
+    this.nodeManager = new NodeManager(this.scene);
+
 
     this.camera = new THREE.PerspectiveCamera(
       60,
@@ -47,7 +53,8 @@ export class SceneManager {
     this.nodesGroup = new THREE.Group();
     this.obstaclesGroup = new THREE.Group();
     this.pathGroup = new THREE.Group();
-    this.scene.add(this.nodesGroup, this.obstaclesGroup, this.pathGroup);
+    this.arrowsGroup = new THREE.Group();
+    this.scene.add(this.nodesGroup, this.obstaclesGroup, this.pathGroup, this.arrowsGroup);
 
     this.cameraManager.setTopView();
     window.addEventListener('resize', this.onResize);
@@ -62,8 +69,7 @@ export class SceneManager {
   ) {
     this.clearGroup(this.nodesGroup);
     this.clearGroup(this.obstaclesGroup);
-
-    // 1. Render Obstacles
+    this.clearGroup(this.arrowsGroup);
     if (obstacles.length > 0) {
       const boxGeo = new THREE.BoxGeometry(1, 1, 1);
       const boxMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.4 });
@@ -81,8 +87,6 @@ export class SceneManager {
       obstacleInstanced.instanceMatrix.needsUpdate = true;
       this.obstaclesGroup.add(obstacleInstanced);
     }
-
-    // 2. Render Nodes
     if (nodes.length > 0) {
       const nodeGeo = new THREE.SphereGeometry(0.15, 16, 16);
       const nodeMat = new THREE.MeshStandardMaterial({ roughness: 0.2 });
@@ -120,6 +124,72 @@ export class SceneManager {
       this.nodesGroup.add(nodeInstanced);
     }
   }
+  public renderStepArrows(parentMap: Map<string, string>, nodesMap: Map<string, GraphNode>) {
+    this.clearGroup(this.arrowsGroup);
+
+    parentMap.forEach((parentId, childId) => {
+      const childNode = nodesMap.get(childId);
+      const parentNode = nodesMap.get(parentId);
+
+      if (childNode && parentNode) {
+        const fromPos = new THREE.Vector3(childNode.position.x, childNode.position.y, childNode.position.z);
+        const toPos = new THREE.Vector3(parentNode.position.x, parentNode.position.y, parentNode.position.z);
+        
+        const direction = new THREE.Vector3().subVectors(toPos, fromPos);
+        const length = direction.length();
+        direction.normalize();
+
+        if (length > 0) {
+          const arrowHelper = new THREE.ArrowHelper(
+            direction,
+            fromPos,
+            length,
+            0xf59e0b, // Amber / Yellow
+            Math.min(0.3, length * 0.4),
+            Math.min(0.2, length * 0.3)
+          );
+          this.arrowsGroup.add(arrowHelper);
+        }
+      }
+    });
+  }
+
+  public renderStepNodes(stepState: PathfindingStepState, nodesMap: Map<string, GraphNode>) {
+    if (this.nodesGroup.children.length === 0) return;
+
+    const nodeInstanced = this.nodesGroup.children[0] as THREE.InstancedMesh;
+    if (!nodeInstanced || !nodeInstanced.instanceColor) return;
+
+    const defaultColor = new THREE.Color(0x38bdf8);  // Cyan/Sky
+    const openColor = new THREE.Color(0xfacc15);     // Yellow
+    const closedColor = new THREE.Color(0x64748b);   // Slate Gray
+    const currentColor = new THREE.Color(0xa855f7);  // Purple
+    const startColor = new THREE.Color(0x22c55e);   // Green
+    const targetColor = new THREE.Color(0xef4444);  // Red
+
+    const openListIds = new Set(stepState.openList?.map((n) => n.id) || []);
+    const closedListIds = stepState.closedList || new Set<string>();
+
+    let index = 0;
+    nodesMap.forEach((node) => {
+      let color = defaultColor;
+
+      if (node.id === this.startNodeLight.userData.nodeId || node.id === stepState.parentMap.get(node.id) && !stepState.parentMap.has(node.id)) {
+        color = startColor;
+      } else if (node.id === stepState.currentNode.id) {
+        color = currentColor;
+      } else if (closedListIds.has(node.id)) {
+        color = closedColor;
+      } else if (openListIds.has(node.id)) {
+        color = openColor;
+      }
+
+      nodeInstanced.setColorAt(index, color);
+      index++;
+    });
+
+    nodeInstanced.instanceColor.needsUpdate = true;
+  }
 
   public renderPath(path: GraphNode[]) {
     this.clearGroup(this.pathGroup);
@@ -148,13 +218,20 @@ export class SceneManager {
   private clearGroup(group: THREE.Group) {
     while (group.children.length > 0) {
       const obj = group.children[0];
-      if (obj instanceof THREE.Mesh || obj instanceof THREE.InstancedMesh || obj instanceof THREE.Line) {
-        if (obj.geometry) obj.geometry.dispose();
-        if (obj.material) {
-          if (Array.isArray(obj.material)) {
-            obj.material.forEach((mat) => mat.dispose());
-          } else {
-            obj.material.dispose();
+      if (obj instanceof THREE.Mesh || obj instanceof THREE.InstancedMesh || obj instanceof THREE.Line || obj instanceof THREE.ArrowHelper) {
+        if (obj instanceof THREE.ArrowHelper) {
+          if (obj.line.geometry) obj.line.geometry.dispose();
+          if (obj.cone.geometry) obj.cone.geometry.dispose();
+          if (obj.line.material) (obj.line.material as THREE.Material).dispose();
+          if (obj.cone.material) (obj.cone.material as THREE.Material).dispose();
+        } else {
+          if (obj.geometry) obj.geometry.dispose();
+          if (obj.material) {
+            if (Array.isArray(obj.material)) {
+              obj.material.forEach((mat) => mat.dispose());
+            } else {
+              obj.material.dispose();
+            }
           }
         }
       }
@@ -183,6 +260,7 @@ export class SceneManager {
     this.clearGroup(this.nodesGroup);
     this.clearGroup(this.obstaclesGroup);
     this.clearGroup(this.pathGroup);
+    this.clearGroup(this.arrowsGroup);
     this.cameraManager.destroy();
     this.renderer.dispose();
     if (this.renderer.domElement.parentNode) {

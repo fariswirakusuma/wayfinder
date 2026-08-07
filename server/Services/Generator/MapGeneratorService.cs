@@ -133,8 +133,7 @@ namespace OHL_Wayfinder3D.Services
             };
         }
 
-        // A conventional DFS maze on the X/Z plane. This is the default
-        // presentation: visible corridors and walls rather than a sealed 3D box.
+        // DFS maze
         private void CarvePlanarMaze(int startX, int y, int startZ, int[,,] grid, int width, int depth)
         {
             var stack = new Stack<(int x, int z)>();

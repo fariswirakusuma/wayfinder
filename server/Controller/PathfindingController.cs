@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using OHL_Wayfinder3D.Models;
@@ -23,6 +24,7 @@ namespace OHL_Wayfinder3D.Controllers
         {
             var validationResult = ValidateRequest(request);
             if (validationResult != null) return validationResult;
+
             BuildGraph(request.Nodes, request.Obstacles);
 
             try
@@ -38,17 +40,13 @@ namespace OHL_Wayfinder3D.Controllers
                 var solver = new BellmanFordSolver();
                 List<Node> path = solver.Solve(request.Nodes, startNode, targetNode);
 
-                return Ok(new PathfindingResponse
-                {
-                    Path = path,
-                    Found = path.Count > 0
-                });
+                return Ok(BuildResponse(path, request));
             }
-                catch (InvalidOperationException ex)
-                {
-                    _logger.LogWarning(ex, "Bellman-Ford failed due to invalid graph state.");
-                    return BadRequest(new { message = ex.Message });
-                }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Bellman-Ford failed due to invalid graph state.");
+                return BadRequest(new { message = ex.Message });
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "An error occurred during Bellman-Ford pathfinding execution.");
@@ -61,6 +59,7 @@ namespace OHL_Wayfinder3D.Controllers
         {
             var validationResult = ValidateRequest(request);
             if (validationResult != null) return validationResult;
+
             BuildGraph(request.Nodes, request.Obstacles);
 
             try
@@ -76,11 +75,7 @@ namespace OHL_Wayfinder3D.Controllers
                 var solver = new DijkstraSolver();
                 List<Node> path = solver.Solve(startNode, targetNode);
 
-                return Ok(new PathfindingResponse
-                {
-                    Path = path,
-                    Found = path.Count > 0
-                });
+                return Ok(BuildResponse(path, request));
             }
             catch (Exception ex)
             {
@@ -94,6 +89,7 @@ namespace OHL_Wayfinder3D.Controllers
         {
             var validationResult = ValidateRequest(request);
             if (validationResult != null) return validationResult;
+
             BuildGraph(request.Nodes, request.Obstacles);
 
             try
@@ -105,26 +101,78 @@ namespace OHL_Wayfinder3D.Controllers
                 {
                     return NotFound(new { message = "Start or Target node not found in the provided graph." });
                 }
+
                 var solver = new AstarSolver();
                 List<Node> path = solver.Solve(startNode, targetNode);
 
-                
-
-                return Ok(new PathfindingResponse
-                {
-                    Path = path,
-                    Found = path.Count > 0
-                });
+                return Ok(BuildResponse(path, request));
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "An error occurred during A* pathfinding execution.");
                 return StatusCode(500, new { message = "An internal error occurred while processing the path request." });
             }
-            
         }
 
-        // Shared validation helper
+        private static PathfindingResponse BuildResponse(List<Node> path, PathfindingRequest request)
+        {
+            var response = new PathfindingResponse
+            {
+                Found = path != null && path.Count > 0,
+                Path = path ?? new List<Node>()
+            };
+
+            if (request.StepByStep)
+            {
+                response.Graph = BuildAdjacencyList(request.Nodes);
+                response.Arrows = BuildSearchArrows(request.Nodes);
+            }
+
+            return response;
+        }
+
+        private static Dictionary<string, List<string>> BuildAdjacencyList(List<Node> nodes)
+        {
+            var graphMap = new Dictionary<string, List<string>>();
+
+            foreach (var node in nodes)
+            {
+                var neighborIds = node.Neighbors?
+                    .Where(edge => edge.TargetNode != null)
+                    .Select(edge => edge.TargetNode.Id)
+                    .ToList() ?? new List<string>();
+
+                graphMap[node.Id] = neighborIds;
+            }
+
+            return graphMap;
+        }
+
+        private static List<SearchArrow> BuildSearchArrows(List<Node> nodes)
+        {
+            var arrows = new List<SearchArrow>();
+
+            foreach (var node in nodes)
+            {
+                if (node.Neighbors == null) continue;
+
+                foreach (var edge in node.Neighbors)
+                {
+                    if (edge.TargetNode == null) continue;
+
+                    arrows.Add(new SearchArrow(
+                        fromNodeId: node.Id,
+                        toNodeId: edge.TargetNode.Id,
+                        fromPos: node.Position,
+                        toPos: edge.TargetNode.Position,
+                        floor: node.Floor
+                    ));
+                }
+            }
+
+            return arrows;
+        }
+
         private IActionResult? ValidateRequest(PathfindingRequest request)
         {
             if (request == null)
