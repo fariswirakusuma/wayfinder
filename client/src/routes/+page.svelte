@@ -15,6 +15,7 @@
   let startNodeId = $state('');
   let targetNodeId = $state('');
   let animationSpeedMs = $state(50);
+  let cameramode = $state<'orbit' | 'first-person'>('orbit');
 
   let nodes = $state<Node[]>([]);
   let obstacles = $state<Obstacle[]>([]);
@@ -26,11 +27,15 @@
   let executionTime = $state(0);
   let visitedNodes = $state(0);
 
-  // Sesuaikan interface referensi Scene3D
   let scene3dRef = $state<{
     resetHighlight: () => void;
+    resetCamera: () => void;
     runStepByStepAnimation: () => Promise<void>;
   } | null>(null);
+
+  function handleCameraModeChange(newMode: 'orbit' | 'first-person') {
+    cameramode = newMode;
+  }
 
   async function handleGenerateMap() {
     try {
@@ -99,6 +104,7 @@
 
   function handleClear() {
     isExecutingStepByStep = false;
+    handleCameraModeChange('orbit');
     path = [];
     executionTime = 0;
     visitedNodes = 0;
@@ -106,10 +112,12 @@
     if (scene3dRef?.resetHighlight) {
       scene3dRef.resetHighlight();
     }
+    scene3dRef?.resetCamera();
   }
 
   onMount(() => {
     handleGenerateMap();
+    handleCameraModeChange('orbit');
   });
 </script>
 
@@ -125,6 +133,7 @@
       {targetNodeId}
       {algorithm}
       {animationSpeedMs}
+      {cameramode}
     />
   </div>
   {#if isLoadingMap}
@@ -148,11 +157,13 @@
       bind:targetNodeId
       bind:animationSpeedMs
       bind:isExecutingStepByStep
+      bind:cameramode
       {nodes}
       {isSolving}
       {isLoadingMap}
       {executionTime}
       {visitedNodes}
+      onCameraModeChange={handleCameraModeChange}
       onGenerate={handleGenerateMap}
       onSolve={handleInstantSolve}
       onRunStepByStep={handleRunStepByStep}

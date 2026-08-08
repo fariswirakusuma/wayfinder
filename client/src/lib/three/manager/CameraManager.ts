@@ -5,7 +5,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 export enum CameraMode {
   DEFAULT_TOP_VIEW,
   FOLLOW_NODE,
-  FREE_ORBIT
+  FREE_ORBIT,
+  FIRST_PERSON
 }
 
 export class CameraManager {
@@ -22,22 +23,35 @@ export class CameraManager {
 
   constructor(camera: THREE.PerspectiveCamera, domElement: HTMLElement) {
     this.camera = camera;
-    
-    // Inisialisasi OrbitControls
     this.controls = new OrbitControls(this.camera, domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
 
     this.controls.addEventListener('start', () => {
-      this.mode = CameraMode.FREE_ORBIT;
+      if (this.mode !== CameraMode.FIRST_PERSON) {
+        this.mode = CameraMode.FREE_ORBIT;
+      }
     });
   }
 
-  // --- Public Controls ---
+  public getCamera(): THREE.PerspectiveCamera {
+    return this.camera;
+  }
+
 
   public setTopView(offsetPosition = new THREE.Vector3(0, 200, 0)) {
     this.mode = CameraMode.DEFAULT_TOP_VIEW;
+    this.targetNode = null;
     this.defaultTopPos.copy(offsetPosition);
+    this.controls.enablePan = true;
+    this.controls.enableZoom = true;
+  }
+
+  public setOrbitView() {
+    this.mode = CameraMode.FREE_ORBIT;
+    this.targetNode = null;
+    this.controls.enablePan = true;
+    this.controls.enableZoom = true;
   }
 
   public followNode(node: THREE.Object3D, offset = new THREE.Vector3(0, 5, 10)) {
@@ -60,9 +74,19 @@ export class CameraManager {
       this.controls.target.lerp(this.defaultTargetPos, 0.1);
       this.controls.update();
 
-    } else if (this.mode === CameraMode.FREE_ORBIT) {
+    } else if (this.mode === CameraMode.FREE_ORBIT || this.mode === CameraMode.FIRST_PERSON) {
       this.controls.update();
     }
+  }
+
+  public firstPersonView(currentNode: THREE.Object3D, offset = new THREE.Vector3(0, 1.6, 0)) {
+    this.mode = CameraMode.FIRST_PERSON;
+    this.targetNode = null;
+    this.controls.enablePan = false;
+    this.controls.enableZoom = false;
+    this.camera.position.copy(currentNode.position).add(offset);
+    this.controls.target.copy(currentNode.position).add(offset).add(new THREE.Vector3(0, 0, -1));
+    this.controls.update();
   }
 
   public resize(width: number, height: number) {

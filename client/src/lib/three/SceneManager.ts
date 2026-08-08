@@ -3,6 +3,7 @@ import { CameraManager } from './manager/CameraManager.js';
 import type { Node as GraphNode, Obstacle } from './types';
 import type { PathfindingStepState } from './manager/PathfindingController';
 import { NodeManager } from './manager/NodeManager.js';
+import type { SearchArrow } from '$lib/services/pathfindingApi';
 
 export class SceneManager {
   private container: HTMLElement;
@@ -20,6 +21,8 @@ export class SceneManager {
 
   private startNodeLight: THREE.PointLight;
   private targetNodeLight: THREE.PointLight;
+  private startNodeId?: string;
+  private targetNodeId?: string;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -67,6 +70,8 @@ export class SceneManager {
     startNodeId?: string,
     targetNodeId?: string
   ) {
+    this.startNodeId = startNodeId;
+    this.targetNodeId = targetNodeId;
     this.clearGroup(this.nodesGroup);
     this.clearGroup(this.obstaclesGroup);
     this.clearGroup(this.arrowsGroup);
@@ -124,33 +129,49 @@ export class SceneManager {
       this.nodesGroup.add(nodeInstanced);
     }
   }
-  public renderStepArrows(parentMap: Map<string, string>, nodesMap: Map<string, GraphNode>) {
+  public renderStepArrows(
+    arrows: SearchArrow[],
+    stepState: PathfindingStepState,
+    nodesMap: Map<string, GraphNode>
+  ) {
     this.clearGroup(this.arrowsGroup);
 
-    parentMap.forEach((parentId, childId) => {
-      const childNode = nodesMap.get(childId);
-      const parentNode = nodesMap.get(parentId);
+    const usedEdges = new Set<string>();
+    stepState.parentMap.forEach((parentId, childId) => usedEdges.add(`${parentId}:${childId}`));
+    const processedNodes = new Set(stepState.closedList ? [...stepState.closedList].map(String) : []);
+    if (stepState.currentNode) processedNodes.add(String(stepState.currentNode.id));
 
-      if (childNode && parentNode) {
-        const fromPos = new THREE.Vector3(childNode.position.x, childNode.position.y, childNode.position.z);
-        const toPos = new THREE.Vector3(parentNode.position.x, parentNode.position.y, parentNode.position.z);
-        
-        const direction = new THREE.Vector3().subVectors(toPos, fromPos);
-        const length = direction.length();
-        direction.normalize();
+    arrows.forEach((arrow) => {
+      const edgeId = `${arrow.fromNodeId}:${arrow.toNodeId}`;
+      const parentNode = nodesMap.get(arrow.fromNodeId);
+      const childNode = nodesMap.get(arrow.toNodeId);
 
-        if (length > 0) {
-          const arrowHelper = new THREE.ArrowHelper(
-            direction,
-            fromPos,
-            length,
-            0xf59e0b, // Amber / Yellow
-            Math.min(0.3, length * 0.4),
-            Math.min(0.2, length * 0.3)
-          );
-          this.arrowsGroup.add(arrowHelper);
-        }
-      }
+      const fromPos = arrow
+        ? new THREE.Vector3(arrow.position.x, arrow.position.y, arrow.position.z)
+        : parentNode && new THREE.Vector3(parentNode.position.x, parentNode.position.y, parentNode.position.z);
+      const direction = arrow
+        ? new THREE.Vector3(arrow.direction.x, arrow.direction.y, arrow.direction.z)
+        : parentNode && childNode && new THREE.Vector3().subVectors(childNode.position, parentNode.position);
+
+      if (!fromPos || !direction || direction.lengthSq() === 0) return;
+
+      const length = direction.length();
+      direction.normalize();
+      fromPos.y += 0.08;
+      const color = usedEdges.has(edgeId)
+        ? 0xf59e0b
+        : processedNodes.has(arrow.fromNodeId)
+          ? 0xef4444
+          : 0x334155;
+      const arrowHelper = new THREE.ArrowHelper(
+        direction,
+        fromPos,
+        length,
+        color,
+        Math.min(0.3, length * 0.4),
+        Math.min(0.2, length * 0.3)
+      );
+      this.arrowsGroup.add(arrowHelper);
     });
   }
 
@@ -167,20 +188,23 @@ export class SceneManager {
     const startColor = new THREE.Color(0x22c55e);   // Green
     const targetColor = new THREE.Color(0xef4444);  // Red
 
-    const openListIds = new Set(stepState.openList?.map((n) => n.id) || []);
+    const openListIds = new Set(stepState.openList?.map((n) => String(n.id)) || []);
     const closedListIds = stepState.closedList || new Set<string>();
 
     let index = 0;
     nodesMap.forEach((node) => {
       let color = defaultColor;
 
-      if (node.id === this.startNodeLight.userData.nodeId || node.id === stepState.parentMap.get(node.id) && !stepState.parentMap.has(node.id)) {
+      const nodeId = String(node.id);
+      if (nodeId === this.startNodeId) {
         color = startColor;
-      } else if (node.id === stepState.currentNode.id) {
+      } else if (nodeId === this.targetNodeId) {
+        color = targetColor;
+      } else if (nodeId === String(stepState.currentNode.id)) {
         color = currentColor;
-      } else if (closedListIds.has(node.id)) {
+      } else if (closedListIds.has(nodeId)) {
         color = closedColor;
-      } else if (openListIds.has(node.id)) {
+      } else if (openListIds.has(nodeId)) {
         color = openColor;
       }
 
@@ -213,6 +237,33 @@ export class SceneManager {
     targetMesh.position.copy(points[points.length - 1]);
 
     this.pathGroup.add(startMesh, targetMesh);
+  }
+
+  public clearPath() {
+    this.clearGroup(this.pathGroup);
+  }
+
+  public setCameraMode(mode: 'orbit' | 'first-person', focusNode?: GraphNode) {
+    if (mode === 'orbit' || !focusNode) {
+      this.cameraManager.setOrbitView();
+      return;
+    }
+
+    const nodeObject = new THREE.Object3D();
+    nodeObject.position.set(focusNode.position.x, focusNode.position.y, focusNode.position.z);
+    this.cameraManager.firstPersonView(nodeObject);
+  }
+
+  public resetCamera() {
+    this.cameraManager.setTopView();
+  }
+
+  public async animatePath(path: GraphNode[], delayMs: number) {
+    this.clearPath();
+    for (let length = 2; length <= path.length; length++) {
+      this.renderPath(path.slice(0, length));
+      await new Promise((resolve) => setTimeout(resolve, Math.max(50, delayMs)));
+    }
   }
 
   private clearGroup(group: THREE.Group) {

@@ -7,6 +7,7 @@ export interface SearchArrow {
   position: { x: number; y: number; z: number };
   direction: { x: number; y: number; z: number };
   floor: number;
+  status?: string;
 }
 
 export interface PathfindingRequestPayload {
@@ -60,6 +61,38 @@ function normalizeGraph(rawGraph: any): Record<string, string[]> | undefined {
   return normalized;
 }
 
+function normalizeArrows(rawArrows: any): SearchArrow[] | undefined {
+  if (!Array.isArray(rawArrows)) return undefined;
+
+  return rawArrows
+    .map((arrow: any): SearchArrow | null => {
+      const fromNodeId = arrow.fromNodeId ?? arrow.FromNodeId;
+      const toNodeId = arrow.toNodeId ?? arrow.ToNodeId;
+      const position = arrow.position ?? arrow.Position;
+      const direction = arrow.direction ?? arrow.Direction;
+
+      if (!fromNodeId || !toNodeId || !position || !direction) return null;
+
+      return {
+        fromNodeId: String(fromNodeId),
+        toNodeId: String(toNodeId),
+        position: {
+          x: position.x ?? position.X ?? 0,
+          y: position.y ?? position.Y ?? 0,
+          z: position.z ?? position.Z ?? 0
+        },
+        direction: {
+          x: direction.x ?? direction.X ?? 0,
+          y: direction.y ?? direction.Y ?? 0,
+          z: direction.z ?? direction.Z ?? 0
+        },
+        floor: arrow.floor ?? arrow.Floor ?? 1,
+        status: arrow.status ?? arrow.Status
+      };
+    })
+    .filter((arrow): arrow is SearchArrow => arrow !== null);
+}
+
 export async function solvePath(
   algorithm: 'a-star' | 'dijkstra' | 'bellman-ford',
   payload: PathfindingRequestPayload
@@ -106,7 +139,7 @@ export async function solvePath(
       found: data.found ?? data.Found ?? false,
       path: parsedPath,
       graph: normalizeGraph(rawGraph),
-      arrows: rawArrows ?? undefined,
+      arrows: normalizeArrows(rawArrows),
       executionTime: endTime - startTime,
       visitedNodes: data.visitedNodes ?? data.VisitedNodes ?? data.closedSet?.length ?? 0
     };
@@ -178,7 +211,7 @@ export async function solvePathStepByStep(
       found: data.found ?? data.Found ?? false,
       path: parsedPath,
       graph: normalizeGraph(rawGraph),
-      arrows: rawArrows ?? undefined,
+      arrows: normalizeArrows(rawArrows),
       steps: parsedSteps,
       executionTime: endTime - startTime,
       visitedNodes: data.visitedNodes ?? data.VisitedNodes ?? data.closedSet?.length ?? 0

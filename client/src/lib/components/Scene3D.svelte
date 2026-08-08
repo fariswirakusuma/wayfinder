@@ -13,6 +13,7 @@
     targetNodeId?: string;
     algorithm?: PathfindingAlgorithm;
     animationSpeedMs?: number;
+    cameramode?: 'orbit' | 'first-person';
   }
 
   let {
@@ -22,12 +23,14 @@
     startNodeId = '',
     targetNodeId = '',
     algorithm = 'a-star',
-    animationSpeedMs = 50
+    animationSpeedMs = 50,
+    cameramode = 'orbit'
   }: Scene3DProps = $props();
 
   let containerElement: HTMLDivElement;
   let sceneManager: SceneManager | null = null;
   let isExecutingStepByStep = $state(false);
+  let hasStepByStepResult = $state(false);
 
   onMount(() => {
     if (containerElement) {
@@ -44,22 +47,36 @@
   $effect(() => {
     if (sceneManager) {
       sceneManager.renderGraph(nodes, obstacles, startNodeId, targetNodeId);
-      if (!isExecutingStepByStep) {
+      if (!isExecutingStepByStep && !hasStepByStepResult) {
         sceneManager.renderPath(path);
       }
     }
   });
 
+  $effect(() => {
+    if (!sceneManager) return;
+    const startNode = nodes.find((node) => String(node.id) === String(startNodeId));
+    sceneManager.setCameraMode(cameramode, startNode);
+  });
+
   export function resetHighlight() {
     if (!sceneManager) return;
+    hasStepByStepResult = false;
     sceneManager.renderGraph(nodes, obstacles, startNodeId, targetNodeId);
+    sceneManager.clearPath();
   }
+
+  export function resetCamera() {
+    sceneManager?.resetCamera();
+  }
+
 
   export async function runStepByStepAnimation() {
     if (!sceneManager || !startNodeId || !targetNodeId || isExecutingStepByStep) return;
 
     isExecutingStepByStep = true;
     resetHighlight();
+    hasStepByStepResult = true;
 
     try {
       const response = await solvePathStepByStep(algorithm, {
@@ -71,6 +88,7 @@
       });
 
       const rawGraph = response.graph || (response as any).Graph;
+      const arrows = response.arrows ?? [];
 
       if (!rawGraph && (!response.steps || response.steps.length === 0)) {
         console.warn('Backend tidak mengembalikan data graph maupun steps.', response);
@@ -100,13 +118,13 @@
               ? stepState.parentMap
               : new Map<string, string>(Object.entries(stepState.parentMap));
 
-            sceneManager.renderStepArrows(parentMapAsMap, nodesMap);
+            sceneManager.renderStepArrows(arrows, { ...stepState, parentMap: parentMapAsMap } as any, nodesMap);
           }
 
           await new Promise((r) => setTimeout(r, animationSpeedMs));
 
           if (stepState.pathFound && stepState.pathFound.length > 0) {
-            sceneManager.renderPath(stepState.pathFound);
+            await sceneManager.animatePath(stepState.pathFound, animationSpeedMs);
             break;
           }
         }
@@ -122,6 +140,8 @@
             }).filter((id) => id !== '');
           }
         }
+
+        
 
         const controller = new PathfindingController(
           sceneManager.nodeManager,
@@ -142,13 +162,13 @@
 
           sceneManager.renderStepNodes(stepState as any, nodesMap);
           if (stepState.parentMap) {
-            sceneManager.renderStepArrows(stepState.parentMap, nodesMap);
+            sceneManager.renderStepArrows(arrows, stepState, nodesMap);
           }
 
           await new Promise((r) => setTimeout(r, animationSpeedMs));
 
           if (stepState.pathFound) {
-            sceneManager.renderPath(stepState.pathFound);
+            await sceneManager.animatePath(stepState.pathFound, animationSpeedMs);
             break;
           }
         }

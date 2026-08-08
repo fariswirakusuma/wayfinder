@@ -13,11 +13,13 @@
     targetNodeId = $bindable(''),
     animationSpeedMs = $bindable(200),
     isExecutingStepByStep = $bindable(false),
+    cameramode = $bindable<'orbit' | 'first-person'>('orbit'),
     nodes = [],
     isSolving = false,
     isLoadingMap = false,
     executionTime = 0,
     visitedNodes = 0,
+    onCameraModeChange = () => {},
     onGenerate = () => {},
     onSolve = () => {},
     onRunStepByStep = () => {},
@@ -33,11 +35,13 @@
     targetNodeId?: string;
     animationSpeedMs?: number;
     isExecutingStepByStep?: boolean;
+    cameramode?: 'orbit' | 'first-person';
     nodes?: GraphNode[];
     isSolving?: boolean;
     isLoadingMap?: boolean;
     executionTime?: number;
     visitedNodes?: number;
+    onCameraModeChange?: (mode: 'orbit' | 'first-person') => void | Promise<void>;
     onGenerate?: () => void | Promise<void>;
     onSolve?: () => void | Promise<void>;
     onRunStepByStep?: () => void | Promise<void>;
@@ -88,6 +92,13 @@
   </div>
 
   <div class="section-title">Pathfinding Settings</div>
+  <div class="form-group">
+    <label for="camera-mode">Camera Mode:</label>
+    <select id="camera-mode" bind:value={cameramode} onchange={() => void onCameraModeChange(cameramode)} disabled={isLoadingMap}>
+      <option value="orbit">Orbit</option>
+      <option value="first-person">First Person (Start Node)</option>
+    </select>
+  </div>
   <div class="form-group">
     <label for="startNode">Start Node:</label>
     <select id="startNode" bind:value={startNodeId} disabled={isSolving || isExecutingStepByStep}>
