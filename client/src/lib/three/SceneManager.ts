@@ -14,7 +14,10 @@ export class SceneManager {
   private animFrameId: number | null = null;
 
   private nodesGroup: THREE.Group;
+  private nodePlatformGroup: THREE.Group;
+  private baseplateGroup: THREE.Group;
   private obstaclesGroup: THREE.Group;
+  private colliderGroup: THREE.Group;
   private pathGroup: THREE.Group;
   private arrowsGroup: THREE.Group;
   public nodeManager: NodeManager;
@@ -23,13 +26,15 @@ export class SceneManager {
   private targetNodeLight: THREE.PointLight;
   private startNodeId?: string;
   private targetNodeId?: string;
+  private visitedNodeIds: Set<string> = new Set();
+  private nodeIndexMap: Map<string, number> = new Map();
+  private nodeIdsOrdered: string[] = [];
 
   constructor(container: HTMLElement) {
     this.container = container;
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0a0f1d);
     this.nodeManager = new NodeManager(this.scene);
-
 
     this.camera = new THREE.PerspectiveCamera(
       60,
@@ -57,7 +62,10 @@ export class SceneManager {
     this.obstaclesGroup = new THREE.Group();
     this.pathGroup = new THREE.Group();
     this.arrowsGroup = new THREE.Group();
-    this.scene.add(this.nodesGroup, this.obstaclesGroup, this.pathGroup, this.arrowsGroup);
+    this.nodePlatformGroup = new THREE.Group();
+    this.baseplateGroup = new THREE.Group();
+    this.colliderGroup = new THREE.Group();
+    this.scene.add(this.nodesGroup, this.baseplateGroup, this.nodePlatformGroup, this.obstaclesGroup, this.colliderGroup, this.pathGroup, this.arrowsGroup);
 
     this.cameraManager.setTopView();
     window.addEventListener('resize', this.onResize);
@@ -72,13 +80,42 @@ export class SceneManager {
   ) {
     this.startNodeId = startNodeId;
     this.targetNodeId = targetNodeId;
+    this.visitedNodeIds.clear();
+    this.nodeIndexMap.clear();
+    this.nodeIdsOrdered = [];
     this.clearGroup(this.nodesGroup);
+    this.clearGroup(this.baseplateGroup);
+    this.clearGroup(this.nodePlatformGroup);
     this.clearGroup(this.obstaclesGroup);
+    this.clearGroup(this.colliderGroup);
     this.clearGroup(this.arrowsGroup);
+    const colliderMat = new THREE.MeshBasicMaterial({ visible: false });
+    const nodeTileSize = 1.8;
+    if (nodes.length > 0) {
+      const positions = nodes.map((node) => node.position);
+      const minX = Math.min(...positions.map((pos) => pos.x));
+      const maxX = Math.max(...positions.map((pos) => pos.x));
+      const minZ = Math.min(...positions.map((pos) => pos.z));
+      const maxZ = Math.max(...positions.map((pos) => pos.z));
+      const plateWidth = Math.max(2, maxX - minX + 2.0);
+      const plateDepth = Math.max(2, maxZ - minZ + 2.0);
+      const baseplateGeo = new THREE.BoxGeometry(plateWidth, 0.12, plateDepth);
+      const baseplateMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.95, metalness: 0.05 });
+      const baseplateMesh = new THREE.Mesh(baseplateGeo, baseplateMat);
+      baseplateMesh.position.set((minX + maxX) / 2, -0.06, (minZ + maxZ) / 2);
+      baseplateMesh.receiveShadow = true;
+      this.baseplateGroup.add(baseplateMesh);
+
+      const baseplateCollider = new THREE.Mesh(baseplateGeo, colliderMat);
+      baseplateCollider.position.copy(baseplateMesh.position);
+      baseplateCollider.updateMatrix();
+      baseplateCollider.matrixAutoUpdate = false;
+      this.colliderGroup.add(baseplateCollider);
+    }
+
     if (obstacles.length > 0) {
       const boxGeo = new THREE.BoxGeometry(1, 1, 1);
       const boxMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.4 });
-      
       const obstacleInstanced = new THREE.InstancedMesh(boxGeo, boxMat, obstacles.length);
       const dummy = new THREE.Object3D();
 
@@ -87,39 +124,59 @@ export class SceneManager {
         dummy.scale.set(obs.width || 1, obs.height || 1, obs.depth || 1);
         dummy.updateMatrix();
         obstacleInstanced.setMatrixAt(i, dummy.matrix);
+
+        const obstacleCollider = new THREE.Mesh(boxGeo, colliderMat);
+        obstacleCollider.position.copy(dummy.position);
+        obstacleCollider.scale.copy(dummy.scale);
+        obstacleCollider.updateMatrix();
+        obstacleCollider.matrixAutoUpdate = false;
+        this.colliderGroup.add(obstacleCollider);
       });
-      
+
       obstacleInstanced.instanceMatrix.needsUpdate = true;
       this.obstaclesGroup.add(obstacleInstanced);
     }
+
     if (nodes.length > 0) {
-      const nodeGeo = new THREE.SphereGeometry(0.15, 16, 16);
-      const nodeMat = new THREE.MeshStandardMaterial({ roughness: 0.2 });
+      const nodeGeo = new THREE.BoxGeometry(nodeTileSize, 0.12, nodeTileSize);
+      const nodeMat = new THREE.MeshStandardMaterial({ roughness: 0.25, metalness: 0.1, vertexColors: true });
       const nodeInstanced = new THREE.InstancedMesh(nodeGeo, nodeMat, nodes.length);
       const dummy = new THREE.Object3D();
+      this.nodeIndexMap.clear();
 
-      const defaultColor = new THREE.Color(0x38bdf8);
+      const defaultColor = new THREE.Color(0x60a5fa);
       const startColor = new THREE.Color(0x22c55e);
       const targetColor = new THREE.Color(0xef4444);
+      const openColor = new THREE.Color(0xfacc15);
+      const closedColor = new THREE.Color(0x64748b);
 
+      this.nodeIdsOrdered = nodes.map((node) => String(node.id));
       nodes.forEach((node, i) => {
-        dummy.position.set(node.position.x, node.position.y, node.position.z);
+        this.nodeIndexMap.set(String(node.id), i);
+        dummy.position.set(node.position.x, node.position.y + 0.06, node.position.z);
+        dummy.scale.set(1.0, 1.0, 1.0);
 
         if (node.id === startNodeId) {
           nodeInstanced.setColorAt(i, startColor);
-          dummy.scale.set(1.8, 1.8, 1.8);
+          dummy.scale.set(1.1, 1.0, 1.1);
           this.startNodeLight.position.set(node.position.x, node.position.y + 0.5, node.position.z);
         } else if (node.id === targetNodeId) {
           nodeInstanced.setColorAt(i, targetColor);
-          dummy.scale.set(1.8, 1.8, 1.8);
+          dummy.scale.set(1.1, 1.0, 1.1);
           this.targetNodeLight.position.set(node.position.x, node.position.y + 0.5, node.position.z);
         } else {
           nodeInstanced.setColorAt(i, defaultColor);
-          dummy.scale.set(1.0, 1.0, 1.0);
         }
 
         dummy.updateMatrix();
         nodeInstanced.setMatrixAt(i, dummy.matrix);
+
+        const nodeCollider = new THREE.Mesh(nodeGeo, colliderMat);
+        nodeCollider.position.copy(dummy.position);
+        nodeCollider.scale.copy(dummy.scale);
+        nodeCollider.updateMatrix();
+        nodeCollider.matrixAutoUpdate = false;
+        this.colliderGroup.add(nodeCollider);
       });
 
       nodeInstanced.instanceMatrix.needsUpdate = true;
@@ -157,20 +214,26 @@ export class SceneManager {
 
       const length = direction.length();
       direction.normalize();
-      fromPos.y += 0.08;
+      fromPos.y += 0.22;
       const color = usedEdges.has(edgeId)
-        ? 0xf59e0b
+        ? 0xfbbf24
         : processedNodes.has(arrow.fromNodeId)
-          ? 0xef4444
-          : 0x334155;
+          ? 0xf97316
+          : 0x60a5fa;
       const arrowHelper = new THREE.ArrowHelper(
         direction,
         fromPos,
         length,
         color,
-        Math.min(0.3, length * 0.4),
-        Math.min(0.2, length * 0.3)
+        Math.min(0.45, length * 0.45),
+        Math.min(0.28, length * 0.3)
       );
+      arrowHelper.renderOrder = 999;
+      arrowHelper.line.material = new THREE.LineBasicMaterial({ color, depthTest: false, depthWrite: false });
+      if (arrowHelper.cone.material) {
+        (arrowHelper.cone.material as THREE.Material).dispose();
+      }
+      arrowHelper.cone.material = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.4, depthTest: false, depthWrite: false });
       this.arrowsGroup.add(arrowHelper);
     });
   }
@@ -178,38 +241,53 @@ export class SceneManager {
   public renderStepNodes(stepState: PathfindingStepState, nodesMap: Map<string, GraphNode>) {
     if (this.nodesGroup.children.length === 0) return;
 
-    const nodeInstanced = this.nodesGroup.children[0] as THREE.InstancedMesh;
+    let nodeInstanced = this.nodesGroup.children[0] as THREE.InstancedMesh | undefined;
+    if (!nodeInstanced && this.nodePlatformGroup.children.length > 0) {
+      nodeInstanced = this.nodePlatformGroup.children[0] as THREE.InstancedMesh;
+    }
     if (!nodeInstanced || !nodeInstanced.instanceColor) return;
 
-    const defaultColor = new THREE.Color(0x38bdf8);  // Cyan/Sky
+    const defaultColor = new THREE.Color(0x60a5fa);  // Brighter cyan
     const openColor = new THREE.Color(0xfacc15);     // Yellow
     const closedColor = new THREE.Color(0x64748b);   // Slate Gray
     const currentColor = new THREE.Color(0xa855f7);  // Purple
-    const startColor = new THREE.Color(0x22c55e);   // Green
+    const pathColor = new THREE.Color(0x22c55e);    // Final path green
+    const startColor = new THREE.Color(0x16a34a);   // Strong green
     const targetColor = new THREE.Color(0xef4444);  // Red
 
     const openListIds = new Set(stepState.openList?.map((n) => String(n.id)) || []);
     const closedListIds = stepState.closedList || new Set<string>();
+    const pathIds = new Set(stepState.pathFound?.map((n) => String(n.id)) || []);
 
-    let index = 0;
-    nodesMap.forEach((node) => {
+    closedListIds.forEach((id) => this.visitedNodeIds.add(id));
+    openListIds.forEach((id) => this.visitedNodeIds.add(id));
+    if (stepState.currentNode) {
+      this.visitedNodeIds.add(String(stepState.currentNode.id));
+    }
+
+    const orderedIds = this.nodeIdsOrdered.length > 0 ? this.nodeIdsOrdered : Array.from(nodesMap.keys());
+
+    orderedIds.forEach((nodeId) => {
+      const index = this.nodeIndexMap.get(nodeId);
+      if (index === undefined) return;
+
       let color = defaultColor;
 
-      const nodeId = String(node.id);
       if (nodeId === this.startNodeId) {
         color = startColor;
       } else if (nodeId === this.targetNodeId) {
         color = targetColor;
-      } else if (nodeId === String(stepState.currentNode.id)) {
+      } else if (pathIds.has(nodeId)) {
+        color = pathColor;
+      } else if (stepState.currentNode && nodeId === String(stepState.currentNode.id)) {
         color = currentColor;
-      } else if (closedListIds.has(nodeId)) {
-        color = closedColor;
       } else if (openListIds.has(nodeId)) {
         color = openColor;
+      } else if (closedListIds.has(nodeId) || this.visitedNodeIds.has(nodeId)) {
+        color = closedColor;
       }
 
       nodeInstanced.setColorAt(index, color);
-      index++;
     });
 
     nodeInstanced.instanceColor.needsUpdate = true;
@@ -220,21 +298,26 @@ export class SceneManager {
     if (path.length < 2) return;
 
     const points = path.map((node) => new THREE.Vector3(node.position.x, node.position.y, node.position.z));
-    
-    const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
-    const lineMat = new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 4 });
+    const pathIds = new Set(path.map((node) => String(node.id)));
+    this.colorNodesForPath(pathIds);
+
+    const elevatedPoints = points.map((point) => point.clone().setY(point.y + 0.22));
+    const lineGeo = new THREE.BufferGeometry().setFromPoints(elevatedPoints);
+    const lineMat = new THREE.LineBasicMaterial({ color: 0xffcc00, linewidth: 4, depthTest: false, depthWrite: false });
     const line = new THREE.Line(lineGeo, lineMat);
+    line.renderOrder = 999;
     this.pathGroup.add(line);
 
-    const markerGeo = new THREE.SphereGeometry(0.35, 16, 16);
-    const startMat = new THREE.MeshStandardMaterial({ color: 0x10b981, emissive: 0x059669 });
-    const targetMat = new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xd97706 });
+    const markerGeo = new THREE.SphereGeometry(0.28, 16, 16);
+    const startMat = new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x22c55e, emissiveIntensity: 0.9, depthTest: false, depthWrite: false });
+    const targetMat = new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xef4444, emissiveIntensity: 0.9, depthTest: false, depthWrite: false });
 
     const startMesh = new THREE.Mesh(markerGeo, startMat);
-    startMesh.position.copy(points[0]);
-
+    startMesh.position.copy(points[0]).setY(points[0].y + 0.26);
+    startMesh.renderOrder = 999;
     const targetMesh = new THREE.Mesh(markerGeo, targetMat);
-    targetMesh.position.copy(points[points.length - 1]);
+    targetMesh.position.copy(points[points.length - 1]).setY(points[points.length - 1].y + 0.26);
+    targetMesh.renderOrder = 999;
 
     this.pathGroup.add(startMesh, targetMesh);
   }
@@ -243,15 +326,55 @@ export class SceneManager {
     this.clearGroup(this.pathGroup);
   }
 
+  private colorNodesForPath(pathIds: Set<string>) {
+    if (this.nodesGroup.children.length === 0) return;
+
+    let nodeInstanced = this.nodesGroup.children[0] as THREE.InstancedMesh | undefined;
+    if (!nodeInstanced && this.nodePlatformGroup.children.length > 0) {
+      nodeInstanced = this.nodePlatformGroup.children[0] as THREE.InstancedMesh;
+    }
+    if (!nodeInstanced || !nodeInstanced.instanceColor) return;
+
+    const pathColor = new THREE.Color(0x22c55e);
+    const defaultColor = new THREE.Color(0x60a5fa);
+
+    const count = nodeInstanced.count;
+    for (let i = 0; i < count; i++) {
+      nodeInstanced.setColorAt(i, defaultColor);
+    }
+
+    for (const pathNodeId of pathIds) {
+      const index = this.nodeIndexMap.get(pathNodeId);
+      if (index !== undefined) {
+        nodeInstanced.setColorAt(index, pathColor);
+      }
+    }
+
+    if (this.startNodeId) {
+      const startIndex = this.nodeIndexMap.get(this.startNodeId);
+      if (startIndex !== undefined) {
+        nodeInstanced.setColorAt(startIndex, new THREE.Color(0x22c55e));
+      }
+    }
+    if (this.targetNodeId) {
+      const targetIndex = this.nodeIndexMap.get(this.targetNodeId);
+      if (targetIndex !== undefined) {
+        nodeInstanced.setColorAt(targetIndex, new THREE.Color(0xef4444));
+      }
+    }
+
+    nodeInstanced.instanceColor.needsUpdate = true;
+  }
+
   public setCameraMode(mode: 'orbit' | 'first-person', focusNode?: GraphNode) {
     if (mode === 'orbit' || !focusNode) {
       this.cameraManager.setOrbitView();
       return;
     }
 
-    const nodeObject = new THREE.Object3D();
-    nodeObject.position.set(focusNode.position.x, focusNode.position.y, focusNode.position.z);
-    this.cameraManager.firstPersonView(nodeObject);
+    const startPosition = new THREE.Vector3(focusNode.position.x, focusNode.position.y, focusNode.position.z);
+    const colliders = Array.from(this.colliderGroup.children);
+    this.cameraManager.setFirstPersonView(startPosition, colliders);
   }
 
   public resetCamera() {
@@ -309,7 +432,9 @@ export class SceneManager {
     window.removeEventListener('resize', this.onResize);
     if (this.animFrameId !== null) cancelAnimationFrame(this.animFrameId);
     this.clearGroup(this.nodesGroup);
+    this.clearGroup(this.nodePlatformGroup);
     this.clearGroup(this.obstaclesGroup);
+    this.clearGroup(this.colliderGroup);
     this.clearGroup(this.pathGroup);
     this.clearGroup(this.arrowsGroup);
     this.cameraManager.destroy();

@@ -1,4 +1,4 @@
-using OHL_Wayfinder3D.Services;
+using OHL_Wayfinder3D.Services.Generator;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
