@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using OHL_Wayfinder3D.Models;
 using OHL_Wayfinder3D.Services;
+using OHL_Wayfinder3D.Services.Generator;
 
 namespace OHL_Wayfinder3D.Controllers;
 

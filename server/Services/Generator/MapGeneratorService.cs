@@ -1,6 +1,6 @@
 using OHL_Wayfinder3D.Models;
 
-namespace OHL_Wayfinder3D.Services
+namespace OHL_Wayfinder3D.Services.Generator
 {
     public interface IMapGeneratorService
     {
