@@ -13,6 +13,7 @@ namespace OHL_Wayfinder3D.Services.Pathfinding
                 public double HCost { get; set; } = 0;
                 public double FCost => GCost + HCost;
 
+
                 public double Distance => GCost;
 
                 public AstarNode(Node graphNode)
@@ -34,13 +35,13 @@ namespace OHL_Wayfinder3D.Services.Pathfinding
         }
         public class AstarSolver
         {
-                public List<Node> Solve(Node startNode, Node targetNode)
+                public (List<Node> Path, HashSet<string> VisitedNodeIds) Solve(Node startNode, Node targetNode)
                 {
                         var nodeMap = new Dictionary<Node, AstarNode>();
                         AstarNode GetState(Node n) => nodeMap.TryGetValue(n, out var s) ? s : (nodeMap[n] = new AstarNode(n));
 
                         var openSet = new PriorityQueue<AstarNode, double>();
-                        var closedSet = new HashSet<Node>();
+                        var closedSet = new HashSet<string>();
 
                         var startState = GetState(startNode);
                         startState.GCost = 0;
@@ -50,13 +51,18 @@ namespace OHL_Wayfinder3D.Services.Pathfinding
                         while (openSet.Count > 0)
                         {
                                 var current = openSet.Dequeue();
-                                if (current.GraphNode == targetNode) return PathUtils.ReconstructPath(current);
 
-                                closedSet.Add(current.GraphNode);
+                                if (closedSet.Contains(current.GraphNode.Id)) continue;
+                                closedSet.Add(current.GraphNode.Id);
+
+                                if (current.GraphNode == targetNode)
+                                {
+                                        return (PathUtils.ReconstructPath(current), closedSet);
+                                }
 
                                 foreach (Edge edge in current.GraphNode.GetValidNeighbors())
                                 {
-                                        if (closedSet.Contains(edge.TargetNode)) continue;
+                                        if (closedSet.Contains(edge.TargetNode.Id)) continue;
 
                                         var neighborState = GetState(edge.TargetNode);
                                         double newGCost = current.GCost + edge.Weight;
@@ -70,8 +76,7 @@ namespace OHL_Wayfinder3D.Services.Pathfinding
                                         }
                                 }
                         }
-
-                        return new List<Node>(); 
+                        return (new List<Node>(), closedSet); 
                 }
                 public Dictionary<string, List<Node>> GetGraphData(List<Node> allNodes)
                 {

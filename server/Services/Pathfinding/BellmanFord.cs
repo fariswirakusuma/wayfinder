@@ -17,15 +17,14 @@ namespace OHL_Wayfinder3D.Services.Pathfinding
 
     public class BellmanFordSolver
     {
-        public List<Node> Solve(List<Node> allNodes, Node startNode, Node targetNode)
-        {
 
+        public (List<Node> Path, HashSet<string> VisitedNodeIds) Solve(List<Node> allNodes, Node startNode, Node targetNode)
+        {
             var nodeMap = allNodes.ToDictionary(
                 n => n, 
                 n => new BellmanFordNode(n)
             );
             nodeMap[startNode].Distance = 0;
-           
 
             for (int i = 0; i < allNodes.Count - 1; i++)
             {
@@ -62,11 +61,17 @@ namespace OHL_Wayfinder3D.Services.Pathfinding
                     }
                 }
             }
-            BellmanFordNode targetState = nodeMap[targetNode];
-            
 
-            return PathUtils.ReconstructPath(targetState);
+            var visitedNodeIds = nodeMap.Values
+                .Where(n => n.Distance < double.PositiveInfinity)
+                .Select(n => n.GraphNode.Id)
+                .ToHashSet();
+
+            BellmanFordNode targetState = nodeMap[targetNode];
+            return (PathUtils.ReconstructPath(targetState), visitedNodeIds);
         }
+    
+
         public Dictionary<string, List<Node>> GetGraphData(List<Node> allNodes)
         {
             var graphMap = new Dictionary<string, List<Node>>();

@@ -38,9 +38,9 @@ namespace OHL_Wayfinder3D.Controllers
                 }
 
                 var solver = new BellmanFordSolver();
-                List<Node> path = solver.Solve(request.Nodes, startNode, targetNode);
+                var (path, visitedNodeIds) = solver.Solve(request.Nodes, startNode, targetNode);
 
-                return Ok(BuildResponse(path, request));
+                return Ok(BuildResponse(path, visitedNodeIds, request));
             }
             catch (InvalidOperationException ex)
             {
@@ -73,9 +73,9 @@ namespace OHL_Wayfinder3D.Controllers
                 }
 
                 var solver = new DijkstraSolver();
-                List<Node> path = solver.Solve(startNode, targetNode);
+                var (path, visitedNodeIds) = solver.Solve(startNode, targetNode);
 
-                return Ok(BuildResponse(path, request));
+                return Ok(BuildResponse(path, visitedNodeIds, request));
             }
             catch (Exception ex)
             {
@@ -103,9 +103,9 @@ namespace OHL_Wayfinder3D.Controllers
                 }
 
                 var solver = new AstarSolver();
-                List<Node> path = solver.Solve(startNode, targetNode);
+                var (path, visitedNodeIds) = solver.Solve(startNode, targetNode);
 
-                return Ok(BuildResponse(path, request));
+                return Ok(BuildResponse(path, visitedNodeIds, request));
             }
             catch (Exception ex)
             {
@@ -114,18 +114,20 @@ namespace OHL_Wayfinder3D.Controllers
             }
         }
 
-        private static PathfindingResponse BuildResponse(List<Node> path, PathfindingRequest request)
+        private static PathfindingResponse BuildResponse(List<Node> path, HashSet<string> visitedNodeIds, PathfindingRequest request)
         {
             var response = new PathfindingResponse
             {
                 Found = path != null && path.Count > 0,
-                Path = path ?? new List<Node>()
+                Path = path ?? new List<Node>(),
+                VisitedNodeIds = visitedNodeIds
             };
 
             if (request.StepByStep)
             {
                 response.Graph = BuildAdjacencyList(request.Nodes);
                 response.Arrows = BuildSearchArrows(request.Nodes);
+                // response.VisitedNodeIds = visitedNodeIds;
             }
 
             return response;

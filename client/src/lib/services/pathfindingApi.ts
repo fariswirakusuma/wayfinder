@@ -92,6 +92,20 @@ function normalizeArrows(rawArrows: any): SearchArrow[] | undefined {
     })
     .filter((arrow): arrow is SearchArrow => arrow !== null);
 }
+function parseVisitedNodes(data: any): number {
+  const rawVisited = data.visitedNodes ?? data.VisitedNodes ?? data.visitedNodeIds ?? data.VisitedNodeIds;
+  
+  if (typeof rawVisited === 'number') {
+    return rawVisited;
+  }
+  if (Array.isArray(rawVisited)) {
+    return rawVisited.length;
+  }
+  if (data.closedSet && Array.isArray(data.closedSet)) {
+    return data.closedSet.length;
+  }
+  return 0;
+}
 
 export async function solvePath(
   algorithm: 'a-star' | 'dijkstra' | 'bellman-ford',
@@ -141,7 +155,7 @@ export async function solvePath(
       graph: normalizeGraph(rawGraph),
       arrows: normalizeArrows(rawArrows),
       executionTime: endTime - startTime,
-      visitedNodes: data.visitedNodes ?? data.VisitedNodes ?? data.closedSet?.length ?? 0
+      visitedNodes: parseVisitedNodes(data)
     };
   } catch (error) {
     console.error(`Error executing ${algorithm} pathfinding:`, error);
@@ -214,7 +228,7 @@ export async function solvePathStepByStep(
       arrows: normalizeArrows(rawArrows),
       steps: parsedSteps,
       executionTime: endTime - startTime,
-      visitedNodes: data.visitedNodes ?? data.VisitedNodes ?? data.closedSet?.length ?? 0
+      visitedNodes: parseVisitedNodes(data)
     };
   } catch (error) {
     console.error(`Error executing ${algorithm} step-by-step pathfinding:`, error);

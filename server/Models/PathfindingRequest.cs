@@ -9,6 +9,8 @@ namespace OHL_Wayfinder3D.Models
         public List<Edge> Edges { get; set; } = new();
         public List<Obstacle> Obstacles { get; set; } = new();
         public bool StepByStep { get; set; } = false;
+        public HashSet<string> VisitedNodeIds { get; set; } = new();
+        public int VisitedNodes => VisitedNodeIds.Count;
     }
 
     public class PathfindingResponse
@@ -17,5 +19,7 @@ namespace OHL_Wayfinder3D.Models
         public List<Node> Path { get; set; } = new();
         public Dictionary<string, List<string>>? Graph { get; set; }
         public List<SearchArrow>? Arrows { get; set; }
+        public HashSet<string> VisitedNodeIds { get; set; } = new();
+        public int VisitedNodes => VisitedNodeIds.Count;
     }
 }

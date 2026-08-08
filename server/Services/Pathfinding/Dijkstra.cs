@@ -16,14 +16,14 @@ namespace OHL_Wayfinder3D.Services.Pathfinding
         }
         public class DijkstraSolver
         {
-                public List<Node> Solve(Node startNode, Node targetNode)
+                public (List<Node> Path, HashSet<string> VisitedNodeIds) Solve(Node startNode, Node targetNode)
                 {
                         var nodeMap = new Dictionary<Node, DijkstraNode>();
                         DijkstraNode GetState(Node n) => nodeMap.TryGetValue(n, out var s) ? s : (nodeMap[n] = new DijkstraNode(n));
 
                         var openSet = new PriorityQueue<DijkstraNode, double>();
-                        var closedSet = new HashSet<Node>();
-
+                        var closedSet = new HashSet<string>();
+                        var visitedNodeIds = new HashSet<string>();
                         var startState = GetState(startNode);
                         startState.GCost = 0;
                         openSet.Enqueue(startState, startState.GCost);
@@ -31,13 +31,13 @@ namespace OHL_Wayfinder3D.Services.Pathfinding
                         while (openSet.Count > 0)
                         {
                                 var current = openSet.Dequeue();
-                                if (current.GraphNode == targetNode) return PathUtils.ReconstructPath(current);
+                                if (current.GraphNode == targetNode) return (PathUtils.ReconstructPath(current), closedSet);
 
-                                closedSet.Add(current.GraphNode);
+                                closedSet.Add(current.GraphNode.Id);
 
                                 foreach (Edge edge in current.GraphNode.GetValidNeighbors())
                                 {
-                                        if (closedSet.Contains(edge.TargetNode)) continue;
+                                        if (closedSet.Contains(edge.TargetNode.Id)) continue;
 
                                         var neighborState = GetState(edge.TargetNode);
                                         double newGCost = current.GCost + edge.Weight;
@@ -51,7 +51,7 @@ namespace OHL_Wayfinder3D.Services.Pathfinding
                                 }
                         }
 
-                        return new List<Node>(); 
+                        return (new List<Node>(), closedSet);
                 }
                 public Dictionary<string, List<Node>> GetGraphData(List<Node> allNodes)
                 {
