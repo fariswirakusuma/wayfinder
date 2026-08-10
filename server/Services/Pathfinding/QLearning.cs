@@ -4,39 +4,20 @@ namespace OHL_Wayfinder3D.Services.Pathfinding
 {
     public class QLearningSolver
     {
-        public enum Direction
-        {
-            Up,
-            Down,
-            Left,
-            Right,
-            FloorUp,
-            FloorDown
-        }
-
         public readonly struct QState : IEquatable<QState>
         {
             public string NodeId { get; }
             public int Floor { get; }
-            public Direction Direction { get; }
 
-            public QState(string nodeId, int floor, Direction direction)
+            public QState(string nodeId, int floor)
             {
                 NodeId = nodeId ?? string.Empty;
                 Floor = floor;
-                Direction = direction;
             }
 
-            public bool Equals(QState other) =>
-                NodeId == other.NodeId && Floor == other.Floor && Direction == other.Direction;
-
+            public bool Equals(QState other) => NodeId == other.NodeId && Floor == other.Floor;
             public override bool Equals(object? obj) => obj is QState other && Equals(other);
-
-            public override int GetHashCode() => HashCode.Combine(NodeId, Floor, Direction);
-
-            public static bool operator ==(QState left, QState right) => left.Equals(right);
-
-            public static bool operator !=(QState left, QState right) => !left.Equals(right);
+            public override int GetHashCode() => HashCode.Combine(NodeId, Floor);
         }
 
         public int Episodes { get; set; }
@@ -53,21 +34,11 @@ namespace OHL_Wayfinder3D.Services.Pathfinding
             double? discountFactor = null,
             double? epsilon = null)
         {
-            Episodes = episodes ?? 1000;
-            MaxStepsPerEpisode = maxStepsPerEpisode ?? 200;
+            Episodes = episodes ?? 2000;
+            MaxStepsPerEpisode = maxStepsPerEpisode ?? 300;
             LearningRate = learningRate ?? 0.1;
             DiscountFactor = discountFactor ?? 0.9;
             Epsilon = epsilon ?? 0.2;
-        }
-
-        public QLearningSolver(QLearningOptions? options)
-            : this(
-                options?.Episodes,
-                options?.MaxStepsPerEpisode,
-                options?.LearningRate,
-                options?.DiscountFactor,
-                options?.Epsilon)
-        {
         }
 
         public (List<Node> Path, HashSet<string> VisitedNodeIds) Solve(List<Node> allNodes, Node startNode, Node targetNode)
@@ -75,177 +46,118 @@ namespace OHL_Wayfinder3D.Services.Pathfinding
             ArgumentNullException.ThrowIfNull(allNodes);
             ArgumentNullException.ThrowIfNull(startNode);
             ArgumentNullException.ThrowIfNull(targetNode);
+            var qTable = new Dictionary<(QState State, string TargetActionId), double>();
+            var allVisitedDuringTraining = new HashSet<string> { startNode.Id };
 
-            var qTable = new Dictionary<(QState State, Direction Action), double>();
-            var visitedNodeIds = new HashSet<string> { startNode.Id };
             for (int episode = 0; episode < Episodes; episode++)
             {
                 Node currentNode = startNode;
-                Direction currentDir = Direction.Up;
 
                 for (int step = 0; step < MaxStepsPerEpisode; step++)
                 {
                     if (currentNode.Id == targetNode.Id)
                         break;
 
-                    QState currentState = new(currentNode.Id, currentNode.Floor, currentDir);
-                    Direction chosenAction = ChooseAction(currentState, qTable);
+                    QState currentState = new(currentNode.Id, currentNode.Floor);
+                    var validNeighbors = currentNode.GetValidNeighbors().Select(e => e.TargetNode).ToList();
 
-                    (Node? nextNode, double edgeWeight) = GetNextNode(currentNode, chosenAction);
+                    if (validNeighbors.Count == 0) break; 
 
-                    double reward;
-                    QState nextState;
-
-                    if (nextNode == null)
+                    Node selectedNextNode;
+                    if (_random.NextDouble() < Epsilon)
                     {
-                        reward = -10.0;
-                        nextState = currentState;
-                    }
-                    else if (nextNode.Id == targetNode.Id)
-                    {
-                        reward = 100.0;
-                        nextState = new QState(nextNode.Id, nextNode.Floor, chosenAction);
-                        visitedNodeIds.Add(nextNode.Id);
+                        selectedNextNode = validNeighbors[_random.Next(validNeighbors.Count)];
                     }
                     else
                     {
-                        reward = -edgeWeight;
-                        nextState = new QState(nextNode.Id, nextNode.Floor, chosenAction);
-                        visitedNodeIds.Add(nextNode.Id);
+                        selectedNextNode = GetBestNeighbor(currentState, validNeighbors, qTable);
                     }
 
-                    double oldQ = GetQValue(qTable, currentState, chosenAction);
-                    double maxNextQ = nextNode == null ? 0.0 : GetMaxQValue(qTable, nextState);
+                    allVisitedDuringTraining.Add(selectedNextNode.Id);
+
+                    double reward;
+                    if (selectedNextNode.Id == targetNode.Id)
+                    {
+                        reward = 100.0;
+                    }
+                    else
+                    {
+                        reward = -1.0; 
+                    }
+
+                    QState nextState = new(selectedNextNode.Id, selectedNextNode.Floor);
+                    var nextValidNeighbors = selectedNextNode.GetValidNeighbors().Select(e => e.TargetNode).ToList();
+
+                    double oldQ = GetQValue(qTable, currentState, selectedNextNode.Id);
+                    double maxNextQ = selectedNextNode.Id == targetNode.Id ? 0.0 : GetMaxQValue(qTable, nextState, nextValidNeighbors);
 
                     double newQ = oldQ + LearningRate * (reward + (DiscountFactor * maxNextQ) - oldQ);
-                    qTable[(currentState, chosenAction)] = newQ;
+                    qTable[(currentState, selectedNextNode.Id)] = newQ;
 
-                    if (nextNode != null)
-                    {
-                        currentNode = nextNode;
-                        currentDir = chosenAction;
-                    }
+                    currentNode = selectedNextNode;
                 }
             }
 
-            // --- 2. Path Extraction Phase ---
             List<Node> path = new() { startNode };
+            HashSet<string> pathVisited = new() { startNode.Id };
 
             Node curr = startNode;
-            Direction dir = Direction.Up;
             int maxExtractionSteps = allNodes.Count * 2;
-            HashSet<string> pathNodeIds = new() { startNode.Id };
 
             while (curr.Id != targetNode.Id && maxExtractionSteps-- > 0)
             {
-                QState state = new(curr.Id, curr.Floor, dir);
-                Direction bestAction = GetBestAction(state, qTable);
+                QState state = new(curr.Id, curr.Floor);
+                var validNeighbors = curr.GetValidNeighbors().Select(e => e.TargetNode).ToList();
 
-                (Node? next, _) = GetNextNode(curr, bestAction);
+                if (validNeighbors.Count == 0) break;
+                Node? next = validNeighbors
+                    .Where(n => !pathVisited.Contains(n.Id))
+                    .OrderByDescending(n => GetQValue(qTable, state, n.Id))
+                    .FirstOrDefault();
 
-                if (next == null || pathNodeIds.Contains(next.Id))
-                {
-                    next = GetUnvisitedNeighbor(curr, pathNodeIds);
-                    if (next == null) break;
-                }
+                if (next == null) break;
 
                 curr = next;
-                dir = bestAction;
                 path.Add(curr);
-                pathNodeIds.Add(curr.Id);
-                visitedNodeIds.Add(curr.Id);
+                pathVisited.Add(curr.Id);
             }
 
-            return (path, visitedNodeIds);
+            return (path, allVisitedDuringTraining);
         }
 
-        private Direction ChooseAction(QState state, Dictionary<(QState, Direction), double> qTable)
+        private Node GetBestNeighbor(QState state, List<Node> neighbors, Dictionary<(QState, string), double> qTable)
         {
-            if (_random.NextDouble() < Epsilon)
-            {
-                var directions = Enum.GetValues<Direction>();
-                return directions[_random.Next(directions.Length)];
-            }
-
-            return GetBestAction(state, qTable);
-        }
-
-        private Direction GetBestAction(QState state, Dictionary<(QState, Direction), double> qTable)
-        {
-            Direction bestAction = Direction.Up;
+            Node best = neighbors[0];
             double maxQ = double.MinValue;
 
-            foreach (Direction action in Enum.GetValues<Direction>())
+            foreach (var neighbor in neighbors)
             {
-                double q = GetQValue(qTable, state, action);
+                double q = GetQValue(qTable, state, neighbor.Id);
                 if (q > maxQ)
                 {
                     maxQ = q;
-                    bestAction = action;
+                    best = neighbor;
                 }
             }
-
-            return bestAction;
+            return best;
         }
 
-        private double GetQValue(Dictionary<(QState, Direction), double> qTable, QState state, Direction action)
+        private double GetMaxQValue(Dictionary<(QState, string), double> qTable, QState state, List<Node> nextNeighbors)
         {
-            return qTable.TryGetValue((state, action), out double value) ? value : 0.0;
-        }
-
-        private double GetMaxQValue(Dictionary<(QState, Direction), double> qTable, QState state)
-        {
+            if (nextNeighbors.Count == 0) return 0.0;
             double maxQ = double.MinValue;
-            foreach (Direction action in Enum.GetValues<Direction>())
+
+            foreach (var neighbor in nextNeighbors)
             {
-                double q = GetQValue(qTable, state, action);
+                double q = GetQValue(qTable, state, neighbor.Id);
                 if (q > maxQ) maxQ = q;
             }
             return maxQ == double.MinValue ? 0.0 : maxQ;
         }
 
-        private (Node? Node, double Weight) GetNextNode(Node current, Direction action)
+        private double GetQValue(Dictionary<(QState, string), double> qTable, QState state, string targetActionId)
         {
-            foreach (Edge edge in current.GetValidNeighbors())
-            {
-                Node neighbor = edge.TargetNode;
-                if (IsDirectionMatch(current, neighbor, action))
-                {
-                    return (neighbor, edge.Weight);
-                }
-            }
-
-            return (null, 0);
-        }
-
-        private bool IsDirectionMatch(Node from, Node to, Direction action)
-        {
-            if (to.Floor > from.Floor) return action == Direction.FloorUp;
-            if (to.Floor < from.Floor) return action == Direction.FloorDown;
-
-            double deltaX = to.Position.X - from.Position.X;
-            double deltaY = to.Position.Y - from.Position.Y;
-
-            return action switch
-            {
-                Direction.Up => deltaY > 0 && Math.Abs(deltaY) >= Math.Abs(deltaX),
-                Direction.Down => deltaY < 0 && Math.Abs(deltaY) >= Math.Abs(deltaX),
-                Direction.Right => deltaX > 0 && Math.Abs(deltaX) > Math.Abs(deltaY),
-                Direction.Left => deltaX < 0 && Math.Abs(deltaX) > Math.Abs(deltaY),
-                _ => false
-            };
-        }
-
-        private Node? GetUnvisitedNeighbor(Node current, HashSet<string> visited)
-        {
-            foreach (Edge edge in current.GetValidNeighbors())
-            {
-                if (!visited.Contains(edge.TargetNode.Id))
-                {
-                    return edge.TargetNode;
-                }
-            }
-            return null;
+            return qTable.TryGetValue((state, targetActionId), out double value) ? value : 0.0;
         }
     }
 }
