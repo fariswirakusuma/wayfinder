@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
-export type PathfindingAlgorithm = 'a-star' | 'dijkstra' | 'bellman-ford';
+export type PathfindingAlgorithm = 'a-star' | 'dijkstra' | 'bellman-ford' | 'q-learning';
+
 export interface Point3D {
   x: number;
   y: number;
@@ -24,24 +25,29 @@ export interface Edge {
 
 export interface Node {
   id: string;
-  position: THREE.Vector3|Point3D;
+  position: THREE.Vector3 | Point3D;
   neighbors?: Edge[];
   parent?: Node;
   floor?: number;
   name?: string;
-  
 }
 
 export interface ArrowNode {
-    FromNodeId: string;
-    ToNodeId: string;
-    Floor: number;
-    Status: string;
-    Position: Point3D;
-    Direction: Point3D;
+  FromNodeId: string;
+  ToNodeId: string;
+  Floor: number;
+  Status: string;
+  Position: Point3D;
+  Direction: Point3D;
 }
 
-
+export interface QLearningOptions {
+  episodes?: number;
+  maxStepsPerEpisode?: number;
+  learningRate?: number;
+  discountFactor?: number;
+  epsilon?: number;
+}
 
 export interface PathfindingRequest {
   startNodeId: string;
@@ -49,6 +55,7 @@ export interface PathfindingRequest {
   nodes: Node[];
   edges: Edge[];
   obstacles: Obstacle[];
+  qLearningOptions?: QLearningOptions;
 }
 
 export interface PathfindingResponse {

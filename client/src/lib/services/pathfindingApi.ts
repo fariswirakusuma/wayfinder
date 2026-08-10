@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Node, Edge, Obstacle } from '$lib/three/types';
+import type { Node, Edge, Obstacle, QLearningOptions } from '$lib/three/types';
 
 export interface SearchArrow {
   fromNodeId: string;
@@ -17,6 +17,7 @@ export interface PathfindingRequestPayload {
   edges?: Edge[];
   obstacles: Obstacle[];
   stepByStep?: boolean;
+  qLearningOptions?: QLearningOptions;
 }
 
 export interface PathfindingStepState {
@@ -92,6 +93,7 @@ function normalizeArrows(rawArrows: any): SearchArrow[] | undefined {
     })
     .filter((arrow): arrow is SearchArrow => arrow !== null);
 }
+
 function parseVisitedNodes(data: any): number {
   const rawVisited = data.visitedNodes ?? data.VisitedNodes ?? data.visitedNodeIds ?? data.VisitedNodeIds;
   
@@ -108,24 +110,30 @@ function parseVisitedNodes(data: any): number {
 }
 
 export async function solvePath(
-  algorithm: 'a-star' | 'dijkstra' | 'bellman-ford',
+  algorithm: 'a-star' | 'dijkstra' | 'bellman-ford' | 'q-learning',
   payload: PathfindingRequestPayload
 ): Promise<PathfindingResponsePayload> {
   const startTime = performance.now();
 
   try {
+    const body: Record<string, any> = {
+      startNodeId: payload.startNodeId,
+      targetNodeId: payload.targetNodeId,
+      nodes: payload.nodes,
+      obstacles: payload.obstacles,
+      stepByStep: payload.stepByStep ?? false
+    };
+
+    if (algorithm === 'q-learning' && payload.qLearningOptions) {
+      body.qLearningOptions = payload.qLearningOptions;
+    }
+
     const response = await fetch(`${API_BASE_URL}/${algorithm}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        startNodeId: payload.startNodeId,
-        targetNodeId: payload.targetNodeId,
-        nodes: payload.nodes,
-        obstacles: payload.obstacles,
-        stepByStep: payload.stepByStep ?? false
-      })
+      body: JSON.stringify(body)
     });
 
     if (!response.ok) {
@@ -164,24 +172,30 @@ export async function solvePath(
 }
 
 export async function solvePathStepByStep(
-  algorithm: 'a-star' | 'dijkstra' | 'bellman-ford',
+  algorithm: 'a-star' | 'dijkstra' | 'bellman-ford' | 'q-learning',
   payload: PathfindingRequestPayload
 ): Promise<PathfindingResponsePayload> {
   const startTime = performance.now();
 
   try {
+    const body: Record<string, any> = {
+      startNodeId: payload.startNodeId,
+      targetNodeId: payload.targetNodeId,
+      nodes: payload.nodes,
+      obstacles: payload.obstacles,
+      stepByStep: true
+    };
+
+    if (algorithm === 'q-learning' && payload.qLearningOptions) {
+      body.qLearningOptions = payload.qLearningOptions;
+    }
+
     const response = await fetch(`${API_BASE_URL}/${algorithm}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        startNodeId: payload.startNodeId,
-        targetNodeId: payload.targetNodeId,
-        nodes: payload.nodes,
-        obstacles: payload.obstacles,
-        stepByStep: true
-      })
+      body: JSON.stringify(body)
     });
 
     if (!response.ok) {

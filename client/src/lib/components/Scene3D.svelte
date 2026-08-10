@@ -153,9 +153,14 @@
           generator = controller.solveAStarStepByStep(startNode, targetNode, nodesMap, graphAdjacencyMap);
         } else if (algorithm === 'dijkstra') {
           generator = controller.solveDijkstraStepByStep(startNode, targetNode, nodesMap, graphAdjacencyMap);
-        } else {
+        } else if (algorithm === 'bellman-ford') {
           generator = controller.solveBellmanFordStepByStep(startNode, targetNode, nodesMap, graphAdjacencyMap);
         }
+        else  {
+          generator = controller.solveQLearningStepByStep(startNode, targetNode, nodesMap, graphAdjacencyMap);
+        }
+
+        
 
         for await (const stepState of generator) {
           if (!isExecutingStepByStep) break;

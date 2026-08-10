@@ -11,6 +11,7 @@ namespace OHL_Wayfinder3D.Models
         public bool StepByStep { get; set; } = false;
         public HashSet<string> VisitedNodeIds { get; set; } = new();
         public int VisitedNodes => VisitedNodeIds.Count;
+        public QLearningOptions? QLearningOptions { get; set; }
     }
 
     public class PathfindingResponse
@@ -21,5 +22,6 @@ namespace OHL_Wayfinder3D.Models
         public List<SearchArrow>? Arrows { get; set; }
         public HashSet<string> VisitedNodeIds { get; set; } = new();
         public int VisitedNodes => VisitedNodeIds.Count;
+
     }
 }

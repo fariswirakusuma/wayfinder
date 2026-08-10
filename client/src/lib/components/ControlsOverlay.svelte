@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { MapType } from '$lib/three/generator/MapGenerator';
-  import type { Node as GraphNode, PathfindingAlgorithm } from '$lib/three/types';
+  import type { Node as GraphNode, PathfindingAlgorithm, QLearningOptions } from '$lib/three/types';
 
   let {
     width = $bindable(11),
@@ -19,6 +19,13 @@
     isLoadingMap = false,
     executionTime = 0,
     visitedNodes = 0,
+    qLearningOptions = $bindable<QLearningOptions>({
+      episodes: 1000,
+      maxStepsPerEpisode: 200,
+      learningRate: 0.1,
+      discountFactor: 0.9,
+      epsilon: 0.2
+    }),
     onCameraModeChange = () => {},
     onGenerate = () => {},
     onSolve = () => {},
@@ -41,6 +48,7 @@
     isLoadingMap?: boolean;
     executionTime?: number;
     visitedNodes?: number;
+    qLearningOptions?: QLearningOptions;
     onCameraModeChange?: (mode: 'orbit' | 'first-person') => void | Promise<void>;
     onGenerate?: () => void | Promise<void>;
     onSolve?: () => void | Promise<void>;
@@ -123,8 +131,140 @@
       <option value="a-star">A* (A-Star)</option>
       <option value="dijkstra">Dijkstra</option>
       <option value="bellman-ford">Bellman-Ford</option>
+      <option value="q-learning">Q-Learning</option>
     </select>
   </div>
+
+  {#if algorithm === 'q-learning'}
+    <div class="q-learning-settings">
+      <h4>Q-Learning Configuration</h4>
+      
+      <div class="form-group">
+        <label for="episodes">
+          Episodes: <strong>{qLearningOptions.episodes}</strong>
+        </label>
+        <input
+          id="episodes"
+          type="range"
+          min="100"
+          max="3000"
+          step="100"
+          bind:value={qLearningOptions.episodes}
+          disabled={isSolving || isExecutingStepByStep}
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="maxSteps">
+          Max Steps / Episode: <strong>{qLearningOptions.maxStepsPerEpisode}</strong>
+        </label>
+        <input
+          id="maxSteps"
+          type="range"
+          min="50"
+          max="500"
+          step="10"
+          bind:value={qLearningOptions.maxStepsPerEpisode}
+          disabled={isSolving || isExecutingStepByStep}
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="learningRate">
+          Learning Rate (α): <strong>{qLearningOptions.learningRate}</strong>
+        </label>
+        <input
+          id="learningRate"
+          type="range"
+          min="0.01"
+          max="1.0"
+          step="0.01"
+          bind:value={qLearningOptions.learningRate}
+          disabled={isSolving || isExecutingStepByStep}
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="discountFactor">
+          Discount Factor (γ): <strong>{qLearningOptions.discountFactor}</strong>
+        </label>
+        <input
+          id="discountFactor"
+          type="range"
+          min="0.1"
+          max="0.99"
+          step="0.01"
+          bind:value={qLearningOptions.discountFactor}
+          disabled={isSolving || isExecutingStepByStep}
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="epsilon">
+          Exploration Rate (ε): <strong>{qLearningOptions.epsilon}</strong>
+        </label>
+        <input
+          id="epsilon"
+          type="range"
+          min="0.01"
+          max="1.0"
+          step="0.01"
+          bind:value={qLearningOptions.epsilon}
+          disabled={isSolving || isExecutingStepByStep}
+        />
+      </div>
+    </div>
+  {/if}
+
+  <script lang="ts">
+    import type { QLearningOptions } from '$lib/three/types';
+
+    let algorithm = 'a-star';
+    let isSolving = false;
+    let isExecutingStepByStep = false;
+
+    let qLearningOptions: QLearningOptions = {
+      episodes: 1000,
+      maxStepsPerEpisode: 200,
+      learningRate: 0.1,
+      discountFactor: 0.9,
+      epsilon: 0.2
+    };
+  </script>
+
+  <style>
+    .q-learning-settings {
+      margin-top: 1rem;
+      padding: 0.75rem;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 6px;
+      background: rgba(15, 23, 42, 0.85);
+      color: #e2e8f0;
+    }
+
+    .q-learning-settings h4 {
+      margin-top: 0;
+      margin-bottom: 0.75rem;
+      font-size: 0.95rem;
+      color: #38bdf8;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      margin-bottom: 0.75rem;
+    }
+
+    .form-group label {
+      font-size: 0.85rem;
+      margin-bottom: 0.25rem;
+    }
+
+    input[type='range'] {
+      width: 100%;
+    }
+  </style>
+    
 
   <div class="section-title">Step-by-Step Visualization</div>
   <div class="form-group">

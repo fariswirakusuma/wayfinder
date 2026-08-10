@@ -1,6 +1,6 @@
 import { NodeManager } from './NodeManager';
 import { CameraManager } from './CameraManager';
-import type { Node, Point3D } from '../types';
+import type { Node, Point3D,QLearningOptions } from '../types';
 
 export interface PathfindingStepState {
   currentNode: Node;
@@ -200,6 +200,140 @@ export class PathfindingController {
     if (target && distances.get(targetNode.id) !== Infinity) {
       const path = this.reconstructPath(parentMap, target, nodesMap);
       yield { currentNode: target, distances, parentMap, pathFound: path };
+    }
+  }
+  public async *solveQLearningStepByStep(
+    startNode: Node,
+    targetNode: Node,
+    nodesMap: Map<string, Node>,
+    graphMap: Record<string, string[]>,
+    options?: QLearningOptions
+  ): AsyncGenerator<PathfindingStepState> {
+    const episodes = options?.episodes ?? 300;
+    const maxSteps = options?.maxStepsPerEpisode ?? 100;
+    const alpha = options?.learningRate ?? 0.1;
+    const gamma = options?.discountFactor ?? 0.9;
+    const epsilon = options?.epsilon ?? 0.2;
+
+    const qTable = new Map<string, number>();
+    const parentMap = new Map<string, string>();
+    const distances = new Map<string, number>();
+
+    const getQKey = (uId: string, vId: string) => `${uId}_${vId}`;
+
+    const getQ = (uId: string, vId: string): number => {
+      return qTable.get(getQKey(uId, vId)) ?? 0;
+    };
+
+    const getMaxQ = (uId: string): number => {
+      const neighbors = graphMap[uId] ?? [];
+      if (neighbors.length === 0) return 0;
+      return Math.max(...neighbors.map(vId => getQ(uId, vId)));
+    };
+
+    nodesMap.forEach((_, id) => distances.set(id, Infinity));
+    distances.set(startNode.id, 0);
+
+    for (let ep = 0; ep < episodes; ep++) {
+      let currId = startNode.id;
+
+      for (let step = 0; step < maxSteps; step++) {
+        if (currId === targetNode.id) break;
+
+        const currNode = nodesMap.get(currId);
+        const neighbors = graphMap[currId] ?? [];
+        if (!currNode || neighbors.length === 0) break;
+
+        let chosenNextId: string;
+        if (Math.random() < epsilon) {
+          chosenNextId = neighbors[Math.floor(Math.random() * neighbors.length)];
+        } else {
+          let maxVal = -Infinity;
+          let bestCandidates: string[] = [];
+
+          for (const nextId of neighbors) {
+            const qVal = getQ(currId, nextId);
+            if (qVal > maxVal) {
+              maxVal = qVal;
+              bestCandidates = [nextId];
+            } else if (qVal === maxVal) {
+              bestCandidates.push(nextId);
+            }
+          }
+          chosenNextId = bestCandidates[Math.floor(Math.random() * bestCandidates.length)];
+        }
+
+        const nextNode = nodesMap.get(chosenNextId);
+        if (!nextNode) break;
+
+        const weight = this.getDistance(currNode.position, nextNode.position);
+        
+        // Reward function logic
+        let reward = -weight;
+        if (chosenNextId === targetNode.id) {
+          reward = 100;
+        }
+
+        const oldQ = getQ(currId, chosenNextId);
+        const maxNextQ = chosenNextId === targetNode.id ? 0 : getMaxQ(chosenNextId);
+        const newQ = oldQ + alpha * (reward + gamma * maxNextQ - oldQ);
+
+        qTable.set(getQKey(currId, chosenNextId), newQ);
+        if (newQ > 0 || !parentMap.has(chosenNextId)) {
+          parentMap.set(chosenNextId, currId);
+          distances.set(chosenNextId, (distances.get(currId) ?? 0) + weight);
+        }
+
+        currId = chosenNextId;
+
+        // Yield state per beberapa langkah/episode agar rendering tetap optimal
+        if (step % 5 === 0 || currId === targetNode.id) {
+          yield {
+            currentNode: nextNode,
+            distances,
+            parentMap
+          };
+        }
+      }
+    }
+
+    const path: Node[] = [startNode];
+    let currExtracted = startNode.id;
+    const visitedInExtraction = new Set<string>([startNode.id]);
+    let maxExtractSteps = nodesMap.size;
+
+    while (currExtracted !== targetNode.id && maxExtractSteps-- > 0) {
+      const neighbors = graphMap[currExtracted] ?? [];
+      let bestNext: string | null = null;
+      let maxQVal = -Infinity;
+
+      for (const nextId of neighbors) {
+        if (visitedInExtraction.has(nextId)) continue;
+        const qVal = getQ(currExtracted, nextId);
+        if (qVal > maxQVal) {
+          maxQVal = qVal;
+          bestNext = nextId;
+        }
+      }
+
+      if (!bestNext) break;
+
+      const nextNode = nodesMap.get(bestNext);
+      if (nextNode) {
+        path.push(nextNode);
+        visitedInExtraction.add(bestNext);
+        currExtracted = bestNext;
+      }
+    }
+
+    const target = nodesMap.get(targetNode.id);
+    if (target && currExtracted === targetNode.id) {
+      yield {
+        currentNode: target,
+        distances,
+        parentMap,
+        pathFound: path
+      };
     }
   }
 

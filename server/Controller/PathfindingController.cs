@@ -83,6 +83,44 @@ namespace OHL_Wayfinder3D.Controllers
                 return StatusCode(500, new { message = "An internal error occurred while processing the path request." });
             }
         }
+        [HttpPost("q-learning")]
+        public IActionResult SolveQLearning([FromBody] PathfindingRequest request)
+        {
+            var validationResult = ValidateRequest(request);
+            if (validationResult != null) return validationResult;
+
+
+            BuildGraph(request.Nodes, request.Obstacles);
+
+            try
+            {
+                var startNode = request.Nodes.Find(n => n.Id == request.StartNodeId);
+                var targetNode = request.Nodes.Find(n => n.Id == request.TargetNodeId);
+
+                if (startNode == null || targetNode == null)
+                {
+                    return NotFound(new { message = "Start or Target node not found in the provided graph." });
+                }
+                var allNodes = request.Nodes;
+                var opt = request.QLearningOptions ?? new QLearningOptions();
+
+                var solver = new QLearningSolver(
+                    episodes: opt.Episodes,
+                    maxStepsPerEpisode: opt.MaxStepsPerEpisode,
+                    learningRate: opt.LearningRate,
+                    discountFactor: opt.DiscountFactor,
+                    epsilon: opt.Epsilon
+                );
+                var (path, visitedNodeIds) = solver.Solve(allNodes,startNode, targetNode);
+
+                return Ok(BuildResponse(path, visitedNodeIds, request));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred during q_learning pathfinding execution.");
+                return StatusCode(500, new { message = "An internal error occurred while processing the path request." });
+            }
+        }
 
         [HttpPost("a-star")]
         public IActionResult SolveAStar([FromBody] PathfindingRequest request)
