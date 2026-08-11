@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CameraManager } from './manager/CameraManager.js';
+import { animateObstaclesSpawn } from './generator/MapDataResponse.js';
 import type { Node as GraphNode, Obstacle } from './types';
 import type { PathfindingStepState } from './manager/PathfindingController';
 import { NodeManager } from './manager/NodeManager.js';
@@ -29,6 +30,8 @@ export class SceneManager {
   private visitedNodeIds: Set<string> = new Set();
   private nodeIndexMap: Map<string, number> = new Map();
   private nodeIdsOrdered: string[] = [];
+  private lastNodeIds: string[] = [];
+  private lastObstacleIds: string[] = [];
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -80,6 +83,25 @@ export class SceneManager {
   ) {
     this.startNodeId = startNodeId;
     this.targetNodeId = targetNodeId;
+
+    const currentNodeIds = nodes.map((node) => String(node.id));
+    const currentObstacleIds = obstacles.map((obs) => String(obs.id ?? `${obs.position.x}-${obs.position.z}-${obs.position.y}`));
+    const mapChanged =
+      currentNodeIds.length !== this.lastNodeIds.length ||
+      currentObstacleIds.length !== this.lastObstacleIds.length ||
+      currentNodeIds.some((id, index) => id !== this.lastNodeIds[index]) ||
+      currentObstacleIds.some((id, index) => id !== this.lastObstacleIds[index]);
+
+    this.lastNodeIds = currentNodeIds;
+    this.lastObstacleIds = currentObstacleIds;
+
+    if (!mapChanged) {
+      this.startNodeId = startNodeId;
+      this.targetNodeId = targetNodeId;
+      this.updateStartTargetHighlights();
+      return;
+    }
+
     this.visitedNodeIds.clear();
     this.nodeIndexMap.clear();
     this.nodeIdsOrdered = [];
@@ -115,26 +137,16 @@ export class SceneManager {
 
     if (obstacles.length > 0) {
       const boxGeo = new THREE.BoxGeometry(1, 1, 1);
-      const boxMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.4 });
-      const obstacleInstanced = new THREE.InstancedMesh(boxGeo, boxMat, obstacles.length);
-      const dummy = new THREE.Object3D();
+      animateObstaclesSpawn(obstacles, this.obstaclesGroup);
 
-      obstacles.forEach((obs, i) => {
-        dummy.position.set(obs.position.x, obs.position.y, obs.position.z);
-        dummy.scale.set(obs.width || 1, obs.height || 1, obs.depth || 1);
-        dummy.updateMatrix();
-        obstacleInstanced.setMatrixAt(i, dummy.matrix);
-
+      obstacles.forEach((obs) => {
         const obstacleCollider = new THREE.Mesh(boxGeo, colliderMat);
-        obstacleCollider.position.copy(dummy.position);
-        obstacleCollider.scale.copy(dummy.scale);
+        obstacleCollider.position.set(obs.position.x, obs.position.y, obs.position.z);
+        obstacleCollider.scale.set(obs.width || 1, obs.height || 1, obs.depth || 1);
         obstacleCollider.updateMatrix();
         obstacleCollider.matrixAutoUpdate = false;
         this.colliderGroup.add(obstacleCollider);
       });
-
-      obstacleInstanced.instanceMatrix.needsUpdate = true;
-      this.obstaclesGroup.add(obstacleInstanced);
     }
 
     if (nodes.length > 0) {
@@ -375,6 +387,40 @@ export class SceneManager {
     const startPosition = new THREE.Vector3(focusNode.position.x, focusNode.position.y, focusNode.position.z);
     const colliders = Array.from(this.colliderGroup.children);
     this.cameraManager.setFirstPersonView(startPosition, colliders);
+  }
+
+  private updateStartTargetHighlights() {
+    if (this.nodesGroup.children.length === 0) return;
+
+    let nodeInstanced = this.nodesGroup.children[0] as THREE.InstancedMesh | undefined;
+    if (!nodeInstanced && this.nodePlatformGroup.children.length > 0) {
+      nodeInstanced = this.nodePlatformGroup.children[0] as THREE.InstancedMesh;
+    }
+    if (!nodeInstanced || !nodeInstanced.instanceColor) return;
+
+    const defaultColor = new THREE.Color(0x60a5fa);
+    const startColor = new THREE.Color(0x22c55e);
+    const targetColor = new THREE.Color(0xef4444);
+
+    const count = nodeInstanced.count;
+    for (let i = 0; i < count; i++) {
+      nodeInstanced.setColorAt(i, defaultColor);
+    }
+
+    if (this.startNodeId) {
+      const startIndex = this.nodeIndexMap.get(this.startNodeId);
+      if (startIndex !== undefined) {
+        nodeInstanced.setColorAt(startIndex, startColor);
+      }
+    }
+    if (this.targetNodeId) {
+      const targetIndex = this.nodeIndexMap.get(this.targetNodeId);
+      if (targetIndex !== undefined) {
+        nodeInstanced.setColorAt(targetIndex, targetColor);
+      }
+    }
+
+    nodeInstanced.instanceColor.needsUpdate = true;
   }
 
   public resetCamera() {
