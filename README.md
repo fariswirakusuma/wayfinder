@@ -86,6 +86,7 @@ Algoritma yang didukung meliputi A\*, Dijkstra, Bellman-Ford, Q-Learning, dan Si
 - **Generasi Peta Dinamis:** Fitur pembuatan pola rintangan secara acak dengan konfigurasi ukuran grid $N \times N$ (rentang $10 \times 10$ hingga $60 \times 60$).
 - **Dashboard Analisis Kinerja:** Panel ringkasan pasca-eksekusi yang menampilkan nama algoritma, waktu komputasi (ms), dan total simpul yang dikunjungi.
 - **Mode Kamera First-Person
+- **Deploy Aplikasi
 
 ## Referensi
 
