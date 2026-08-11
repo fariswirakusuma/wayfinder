@@ -41,6 +41,7 @@ export class CameraManager {
   private cameraInputThreshold = 128;
   private cameraInputCallback: ((pattern: boolean[][]) => void) | null = null;
   private cameraInputActive = false;
+  private cameraModeChangedCallback: ((mode: 'orbit' | 'first-person') => void) | null = null;
 
   constructor(camera: THREE.PerspectiveCamera, domElement: HTMLElement) {
     this.camera = camera;
@@ -69,6 +70,16 @@ export class CameraManager {
     window.addEventListener('keyup', this.onKeyUp);
   }
 
+  public setModeChangeCallback(callback: (mode: 'orbit' | 'first-person') => void) {
+    this.cameraModeChangedCallback = callback;
+  }
+
+  private notifyCameraModeChanged(mode: 'orbit' | 'first-person') {
+    if (this.cameraModeChangedCallback) {
+      this.cameraModeChangedCallback(mode);
+    }
+  }
+
   public getCamera(): THREE.PerspectiveCamera {
     return this.camera;
   }
@@ -80,6 +91,7 @@ export class CameraManager {
     this.controls.enabled = true;
     this.controls.enablePan = true;
     this.controls.enableZoom = true;
+    this.notifyCameraModeChanged('orbit');
   }
 
   public setOrbitView() {
@@ -89,6 +101,7 @@ export class CameraManager {
     this.controls.enablePan = true;
     this.controls.enableZoom = true;
     this.pointerLockControls.unlock();
+    this.notifyCameraModeChanged('orbit');
   }
 
   public followNode(node: THREE.Object3D, offset = new THREE.Vector3(0, 5, 10)) {
@@ -117,6 +130,7 @@ export class CameraManager {
     object.position.copy(position).add(new THREE.Vector3(0, 1.8, 0));
     this.camera.position.copy(object.position);
     this.pointerLockControls.lock();
+    this.notifyCameraModeChanged('first-person');
   }
 
   public update() {
@@ -158,7 +172,7 @@ export class CameraManager {
     this.fpVelocity.y -= 30.0 * delta;
 
     this.fpDirection.z = Number(this.fpMoveForward) - Number(this.fpMoveBackward);
-    this.fpDirection.x = Number(this.fpMoveRight) - Number(this.fpMoveLeft);
+    this.fpDirection.x = Number(this.fpMoveLeft) - Number(this.fpMoveRight);
     this.fpDirection.normalize();
 
     if (this.fpMoveForward || this.fpMoveBackward) {
@@ -256,7 +270,6 @@ export class CameraManager {
     switch (event.code) {
       case 'Escape':
         this.pointerLockControls.unlock();
-        this.setOrbitView();
         break;
       case 'ArrowUp':
       case 'KeyW':

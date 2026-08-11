@@ -106,6 +106,7 @@
       <option value="orbit">Orbit</option>
       <option value="first-person">First Person (Start Node)</option>
     </select>
+    <small class="hint">Use W/A/S/D to move and Space to jump in First Person. Press Escape to return to Orbit.</small>
   </div>
   <div class="form-group">
     <label for="startNode">Start Node:</label>

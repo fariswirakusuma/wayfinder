@@ -398,6 +398,10 @@ export class SceneManager {
     this.cameraManager.setFirstPersonView(startPosition, colliders);
   }
 
+  public setCameraModeCallback(callback: (mode: 'orbit' | 'first-person') => void) {
+    this.cameraManager.setModeChangeCallback(callback);
+  }
+
   private updateStartTargetHighlights() {
     if (this.nodesGroup.children.length === 0) return;
 

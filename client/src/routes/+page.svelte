@@ -140,6 +140,7 @@
   <div class="absolute inset-0 z-0">
     <Scene3D
       bind:this={scene3dRef}
+      bind:cameramode
       {nodes}
       {obstacles}
       {path}
@@ -147,7 +148,6 @@
       {targetNodeId}
       {algorithm}
       {animationSpeedMs}
-      {cameramode}
       {qLearningOptions}
       {simulatedAnnealingOptions}
     />

@@ -19,16 +19,16 @@
   }
 
   let {
-    nodes = [],
-    obstacles = [],
-    path = [],
-    startNodeId = '',
-    targetNodeId = '',
-    algorithm = 'a-star',
-    animationSpeedMs = 50,
-    cameramode = 'orbit',
-    qLearningOptions = undefined,
-    simulatedAnnealingOptions = undefined
+    nodes = $bindable<GraphNode[]>([]),
+    obstacles = $bindable<Obstacle[]>([]),
+    path = $bindable<GraphNode[]>([]),
+    startNodeId = $bindable(''),
+    targetNodeId = $bindable(''),
+    algorithm = $bindable<PathfindingAlgorithm>('a-star'),
+    animationSpeedMs = $bindable(50),
+    cameramode = $bindable<'orbit' | 'first-person'>('orbit'),
+    qLearningOptions = $bindable<QLearningOptions | undefined>(undefined),
+    simulatedAnnealingOptions = $bindable<SimulatedAnnealingOptions | undefined>(undefined)
   }: Scene3DProps = $props();
 
   let containerElement: HTMLDivElement;
@@ -39,6 +39,9 @@
   onMount(() => {
     if (containerElement) {
       sceneManager = new SceneManager(containerElement);
+      sceneManager.setCameraModeCallback((mode) => {
+        cameramode = mode;
+      });
     }
   });
 
