@@ -33,6 +33,15 @@ export class CameraManager {
   private fpPrevTime = performance.now();
   private fpColliderObjects: THREE.Object3D[] = [];
 
+  private cameraInputStream: MediaStream | null = null;
+  private cameraInputVideo: HTMLVideoElement | null = null;
+  private cameraInputCanvas: HTMLCanvasElement | null = null;
+  private cameraInputContext: CanvasRenderingContext2D | null = null;
+  private cameraInputResolution = { width: 32, height: 32 };
+  private cameraInputThreshold = 128;
+  private cameraInputCallback: ((pattern: boolean[][]) => void) | null = null;
+  private cameraInputActive = false;
+
   constructor(camera: THREE.PerspectiveCamera, domElement: HTMLElement) {
     this.camera = camera;
     this.controls = new OrbitControls(this.camera, domElement);
@@ -111,6 +120,10 @@ export class CameraManager {
   }
 
   public update() {
+    if (this.cameraInputActive) {
+      this.processCameraInputFrame();
+    }
+
     if (this.mode === CameraMode.FOLLOW_NODE && this.targetNode) {
       this.tempDesiredPos.copy(this.targetNode.position).add(this.followOffset);
       this.camera.position.lerp(this.tempDesiredPos, 0.1);
@@ -241,6 +254,10 @@ export class CameraManager {
   private onKeyDown = (event: KeyboardEvent) => {
     if (this.mode !== CameraMode.FIRST_PERSON) return;
     switch (event.code) {
+      case 'Escape':
+        this.pointerLockControls.unlock();
+        this.setOrbitView();
+        break;
       case 'ArrowUp':
       case 'KeyW':
         this.fpMoveForward = true;
@@ -288,12 +305,106 @@ export class CameraManager {
     }
   };
 
+  public startDeviceCameraInput(
+    callback: (pattern: boolean[][]) => void,
+    width = 32,
+    height = 32,
+    threshold = 128
+  ) {
+    if (this.cameraInputActive) {
+      return;
+    }
+
+    this.cameraInputResolution = { width, height };
+    this.cameraInputThreshold = threshold;
+    this.cameraInputCallback = callback;
+
+    this.cameraInputVideo = document.createElement('video');
+    this.cameraInputVideo.autoplay = true;
+    this.cameraInputVideo.playsInline = true;
+    this.cameraInputVideo.muted = true;
+
+    this.cameraInputCanvas = document.createElement('canvas');
+    this.cameraInputCanvas.width = width;
+    this.cameraInputCanvas.height = height;
+    this.cameraInputContext = this.cameraInputCanvas.getContext('2d');
+
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then((stream) => {
+        this.cameraInputStream = stream;
+        if (!this.cameraInputVideo) return;
+        this.cameraInputVideo.srcObject = stream;
+
+        const onLoaded = () => {
+          this.cameraInputActive = true;
+        };
+
+        this.cameraInputVideo.addEventListener('loadedmetadata', onLoaded, { once: true });
+      })
+      .catch((error) => {
+        console.error('Device camera input failed:', error);
+        this.stopDeviceCameraInput();
+      });
+  }
+
+  public stopDeviceCameraInput() {
+    this.cameraInputActive = false;
+    this.cameraInputCallback = null;
+
+    if (this.cameraInputVideo) {
+      this.cameraInputVideo.pause();
+      this.cameraInputVideo.srcObject = null;
+      this.cameraInputVideo.remove();
+      this.cameraInputVideo = null;
+    }
+
+    if (this.cameraInputStream) {
+      this.cameraInputStream.getTracks().forEach((track) => track.stop());
+      this.cameraInputStream = null;
+    }
+
+    if (this.cameraInputCanvas) {
+      this.cameraInputCanvas.remove();
+      this.cameraInputCanvas = null;
+      this.cameraInputContext = null;
+    }
+  }
+
+  private processCameraInputFrame() {
+    if (!this.cameraInputVideo || !this.cameraInputCanvas || !this.cameraInputContext || !this.cameraInputCallback) {
+      return;
+    }
+
+    const width = this.cameraInputResolution.width;
+    const height = this.cameraInputResolution.height;
+
+    this.cameraInputContext.drawImage(this.cameraInputVideo, 0, 0, width, height);
+    const imageData = this.cameraInputContext.getImageData(0, 0, width, height);
+    const pattern: boolean[][] = [];
+
+    for (let y = 0; y < height; y++) {
+      const row: boolean[] = [];
+      for (let x = 0; x < width; x++) {
+        const offset = (y * width + x) * 4;
+        const r = imageData.data[offset];
+        const g = imageData.data[offset + 1];
+        const b = imageData.data[offset + 2];
+        const brightness = (r + g + b) / 3;
+        row.push(brightness < this.cameraInputThreshold);
+      }
+      pattern.push(row);
+    }
+
+    this.cameraInputCallback(pattern);
+  }
+
   public resize(width: number, height: number) {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
   }
 
   public destroy() {
+    this.stopDeviceCameraInput();
     this.controls.dispose();
     if (typeof this.pointerLockControls.dispose === 'function') {
       this.pointerLockControls.dispose();
