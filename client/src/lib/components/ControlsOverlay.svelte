@@ -1,11 +1,10 @@
 <script lang="ts">
   import type { MapType } from '$lib/three/generator/MapGenerator';
-  import type { Node as GraphNode, PathfindingAlgorithm, QLearningOptions } from '$lib/three/types';
+  import type { Node as GraphNode, PathfindingAlgorithm, QLearningOptions, SimulatedAnnealingOptions } from '$lib/three/types';
 
   let {
-    width = $bindable(11),
+    gridSize = $bindable(20),
     height = $bindable(5),
-    depth = $bindable(11),
     mapType = $bindable<MapType>('maze'),
     obstacleDensity = $bindable(0.3),
     algorithm = $bindable<PathfindingAlgorithm>('a-star'),
@@ -26,15 +25,20 @@
       discountFactor: 0.9,
       epsilon: 0.2
     }),
+    simulatedAnnealingOptions = $bindable<SimulatedAnnealingOptions>({
+      numWaypoints: 5,
+      initialTemperature: 1000,
+      coolingRate: 0.95,
+      minTemperature: 0.01
+    }),
     onCameraModeChange = () => {},
     onGenerate = () => {},
     onSolve = () => {},
     onRunStepByStep = () => {},
     onClear = () => {}
   }: {
-    width?: number;
+    gridSize?: number;
     height?: number;
-    depth?: number;
     mapType?: MapType;
     obstacleDensity?: number;
     algorithm?: PathfindingAlgorithm;
@@ -49,6 +53,7 @@
     executionTime?: number;
     visitedNodes?: number;
     qLearningOptions?: QLearningOptions;
+    simulatedAnnealingOptions?: SimulatedAnnealingOptions;
     onCameraModeChange?: (mode: 'orbit' | 'first-person') => void | Promise<void>;
     onGenerate?: () => void | Promise<void>;
     onSolve?: () => void | Promise<void>;
@@ -85,18 +90,13 @@
   {/if}
 
   <div class="form-group">
-    <label for="width">Width (X): {width}</label>
-    <input type="range" id="width" min="5" max="25" step="2" bind:value={width} disabled={isSolving || isExecutingStepByStep} />
+    <label for="gridSize">Grid Size: {gridSize} × {gridSize}</label>
+    <input type="range" id="gridSize" min="10" max="60" step="1" bind:value={gridSize} disabled={isSolving || isExecutingStepByStep} />
   </div>
 
   <div class="form-group">
     <label for="height">Height / Floors (Y): {height}</label>
     <input type="range" id="height" min="1" max="11" step="2" bind:value={height} disabled={isSolving || isExecutingStepByStep} />
-  </div>
-
-  <div class="form-group">
-    <label for="depth">Depth (Z): {depth}</label>
-    <input type="range" id="depth" min="5" max="25" step="2" bind:value={depth} disabled={isSolving || isExecutingStepByStep} />
   </div>
 
   <div class="section-title">Pathfinding Settings</div>
@@ -132,6 +132,7 @@
       <option value="dijkstra">Dijkstra</option>
       <option value="bellman-ford">Bellman-Ford</option>
       <option value="q-learning">Q-Learning</option>
+      <option value="simulated-annealing">Simulated Annealing</option>
     </select>
   </div>
 
@@ -216,21 +217,59 @@
     </div>
   {/if}
 
-  <script lang="ts">
-    import type { QLearningOptions } from '$lib/three/types';
-
-    let algorithm = 'a-star';
-    let isSolving = false;
-    let isExecutingStepByStep = false;
-
-    let qLearningOptions: QLearningOptions = {
-      episodes: 1000,
-      maxStepsPerEpisode: 200,
-      learningRate: 0.1,
-      discountFactor: 0.9,
-      epsilon: 0.2
-    };
-  </script>
+  {#if algorithm === 'simulated-annealing'}
+    <div class="q-learning-settings">
+      <h4>Simulated Annealing</h4>
+      <div class="form-group">
+        <label for="numWaypoints">Waypoints: <strong>{simulatedAnnealingOptions.numWaypoints}</strong></label>
+        <input
+          id="numWaypoints"
+          type="range"
+          min="1"
+          max="20"
+          step="1"
+          bind:value={simulatedAnnealingOptions.numWaypoints}
+          disabled={isSolving || isExecutingStepByStep}
+        />
+      </div>
+      <div class="form-group">
+        <label for="initialTemperature">Initial Temperature: <strong>{simulatedAnnealingOptions.initialTemperature}</strong></label>
+        <input
+          id="initialTemperature"
+          type="range"
+          min="100"
+          max="2000"
+          step="50"
+          bind:value={simulatedAnnealingOptions.initialTemperature}
+          disabled={isSolving || isExecutingStepByStep}
+        />
+      </div>
+      <div class="form-group">
+        <label for="coolingRate">Cooling Rate: <strong>{simulatedAnnealingOptions.coolingRate}</strong></label>
+        <input
+          id="coolingRate"
+          type="range"
+          min="0.80"
+          max="0.99"
+          step="0.01"
+          bind:value={simulatedAnnealingOptions.coolingRate}
+          disabled={isSolving || isExecutingStepByStep}
+        />
+      </div>
+      <div class="form-group">
+        <label for="minTemperature">Min Temperature: <strong>{simulatedAnnealingOptions.minTemperature}</strong></label>
+        <input
+          id="minTemperature"
+          type="range"
+          min="0.001"
+          max="1.0"
+          step="0.001"
+          bind:value={simulatedAnnealingOptions.minTemperature}
+          disabled={isSolving || isExecutingStepByStep}
+        />
+      </div>
+    </div>
+  {/if}
 
   <style>
     .q-learning-settings {

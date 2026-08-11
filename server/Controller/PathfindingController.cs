@@ -152,6 +152,37 @@ namespace OHL_Wayfinder3D.Controllers
             }
         }
 
+        [HttpPost("simulated-annealing")]
+        public IActionResult SolveSimulatedAnnealing([FromBody] PathfindingRequest request)
+        {
+            var validationResult = ValidateRequest(request);
+            if (validationResult != null) return validationResult;
+
+            BuildGraph(request.Nodes, request.Obstacles);
+
+            try
+            {
+                var startNode = request.Nodes.Find(n => n.Id == request.StartNodeId);
+                var targetNode = request.Nodes.Find(n => n.Id == request.TargetNodeId);
+
+                if (startNode == null || targetNode == null)
+                {
+                    return NotFound(new { message = "Start or Target node not found in the provided graph." });
+                }
+
+                var options = request.SimulatedAnnealingOptions ?? new SimulatedAnnealingOptions();
+                var solver = new SimulatedAnnealingSolver();
+                var (path, visitedNodeIds) = solver.Solve(request.Nodes, startNode, targetNode, options);
+
+                return Ok(BuildResponse(path, visitedNodeIds, request));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred during Simulated Annealing pathfinding execution.");
+                return StatusCode(500, new { message = "An internal error occurred while processing the path request." });
+            }
+        }
+
         private static PathfindingResponse BuildResponse(List<Node> path, HashSet<string> visitedNodeIds, PathfindingRequest request)
         {
             var response = new PathfindingResponse
@@ -165,11 +196,11 @@ namespace OHL_Wayfinder3D.Controllers
             {
                 response.Graph = BuildAdjacencyList(request.Nodes);
                 response.Arrows = BuildSearchArrows(request.Nodes);
-                // response.VisitedNodeIds = visitedNodeIds;
             }
 
             return response;
         }
+
 
         private static Dictionary<string, List<string>> BuildAdjacencyList(List<Node> nodes)
         {

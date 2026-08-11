@@ -12,6 +12,7 @@ namespace OHL_Wayfinder3D.Models
         public HashSet<string> VisitedNodeIds { get; set; } = new();
         public int VisitedNodes => VisitedNodeIds.Count;
         public QLearningOptions? QLearningOptions { get; set; }
+        public SimulatedAnnealingOptions? SimulatedAnnealingOptions { get; set; }
     }
 
     public class PathfindingResponse

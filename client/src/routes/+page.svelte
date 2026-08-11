@@ -4,11 +4,10 @@
   import ControlsOverlay from '$lib/components/ControlsOverlay.svelte';
   import { fetchGeneratedMap, type MapType } from '$lib/three/generator/MapGenerator';
   import { solvePath } from '$lib/services/pathfindingApi';
-  import type { Node, Obstacle, PathfindingAlgorithm } from '$lib/three/types';
+  import type { Node, Obstacle, PathfindingAlgorithm, QLearningOptions, SimulatedAnnealingOptions } from '$lib/three/types';
 
-  let width = $state(11);
+  let gridSize = $state(20);
   let height = $state(1);
-  let depth = $state(11);
   let mapType = $state<MapType>('maze');
   let obstacleDensity = $state(0.3);
   let algorithm = $state<PathfindingAlgorithm>('a-star');
@@ -26,6 +25,19 @@
   let isExecutingStepByStep = $state(false);
   let executionTime = $state(0);
   let visitedNodes = $state(0);
+  let qLearningOptions = $state<QLearningOptions>({
+    episodes: 1000,
+    maxStepsPerEpisode: 200,
+    learningRate: 0.1,
+    discountFactor: 0.9,
+    epsilon: 0.2
+  });
+  let simulatedAnnealingOptions = $state<SimulatedAnnealingOptions>({
+    numWaypoints: 5,
+    initialTemperature: 1000,
+    coolingRate: 0.95,
+    minTemperature: 0.01
+  });
 
   let scene3dRef = $state<{
     resetHighlight: () => void;
@@ -43,9 +55,9 @@
       handleClear();
 
       const data = await fetchGeneratedMap({
-        width,
+        width: gridSize,
         height,
-        depth,
+        depth: gridSize,
         mapType,
         obstacleDensity
       });
@@ -76,7 +88,9 @@
         targetNodeId,
         nodes,
         edges: [],
-        obstacles
+        obstacles,
+        qLearningOptions: algorithm === 'q-learning' ? qLearningOptions : undefined,
+        simulatedAnnealingOptions: algorithm === 'simulated-annealing' ? simulatedAnnealingOptions : undefined
       });
 
       path = data.path;
@@ -134,6 +148,8 @@
       {algorithm}
       {animationSpeedMs}
       {cameramode}
+      {qLearningOptions}
+      {simulatedAnnealingOptions}
     />
   </div>
   {#if isLoadingMap}
@@ -147,9 +163,8 @@
 
   <div class="absolute inset-0 z-10 pointer-events-none p-4">
     <ControlsOverlay
-      bind:width
+      bind:gridSize
       bind:height
-      bind:depth
       bind:mapType
       bind:obstacleDensity
       bind:algorithm
@@ -158,6 +173,8 @@
       bind:animationSpeedMs
       bind:isExecutingStepByStep
       bind:cameramode
+      bind:qLearningOptions
+      bind:simulatedAnnealingOptions
       {nodes}
       {isSolving}
       {isLoadingMap}

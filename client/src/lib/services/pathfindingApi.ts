@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Node, Edge, Obstacle, QLearningOptions } from '$lib/three/types';
+import type { Node, Edge, Obstacle, QLearningOptions, SimulatedAnnealingOptions } from '$lib/three/types';
 
 export interface SearchArrow {
   fromNodeId: string;
@@ -18,6 +18,7 @@ export interface PathfindingRequestPayload {
   obstacles: Obstacle[];
   stepByStep?: boolean;
   qLearningOptions?: QLearningOptions;
+  simulatedAnnealingOptions?: SimulatedAnnealingOptions;
 }
 
 export interface PathfindingStepState {
@@ -110,7 +111,7 @@ function parseVisitedNodes(data: any): number {
 }
 
 export async function solvePath(
-  algorithm: 'a-star' | 'dijkstra' | 'bellman-ford' | 'q-learning',
+  algorithm: 'a-star' | 'dijkstra' | 'bellman-ford' | 'q-learning' | 'simulated-annealing',
   payload: PathfindingRequestPayload
 ): Promise<PathfindingResponsePayload> {
   const startTime = performance.now();
@@ -126,6 +127,9 @@ export async function solvePath(
 
     if (algorithm === 'q-learning' && payload.qLearningOptions) {
       body.qLearningOptions = payload.qLearningOptions;
+    }
+    if (algorithm === 'simulated-annealing' && payload.simulatedAnnealingOptions) {
+      body.simulatedAnnealingOptions = payload.simulatedAnnealingOptions;
     }
 
     const response = await fetch(`${API_BASE_URL}/${algorithm}`, {
@@ -172,7 +176,7 @@ export async function solvePath(
 }
 
 export async function solvePathStepByStep(
-  algorithm: 'a-star' | 'dijkstra' | 'bellman-ford' | 'q-learning',
+  algorithm: 'a-star' | 'dijkstra' | 'bellman-ford' | 'q-learning' | 'simulated-annealing',
   payload: PathfindingRequestPayload
 ): Promise<PathfindingResponsePayload> {
   const startTime = performance.now();
@@ -188,6 +192,9 @@ export async function solvePathStepByStep(
 
     if (algorithm === 'q-learning' && payload.qLearningOptions) {
       body.qLearningOptions = payload.qLearningOptions;
+    }
+    if (algorithm === 'simulated-annealing' && payload.simulatedAnnealingOptions) {
+      body.simulatedAnnealingOptions = payload.simulatedAnnealingOptions;
     }
 
     const response = await fetch(`${API_BASE_URL}/${algorithm}`, {

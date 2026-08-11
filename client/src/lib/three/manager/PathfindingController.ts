@@ -1,6 +1,6 @@
 import { NodeManager } from './NodeManager';
 import { CameraManager } from './CameraManager';
-import type { Node, Point3D,QLearningOptions } from '../types';
+import type { Node, Point3D, QLearningOptions, SimulatedAnnealingOptions } from '../types';
 
 export interface PathfindingStepState {
   currentNode: Node;
@@ -335,6 +335,157 @@ export class PathfindingController {
         pathFound: path
       };
     }
+  }
+
+  public async *solveSimulatedAnnealingStepByStep(
+    startNode: Node,
+    targetNode: Node,
+    nodesMap: Map<string, Node>,
+    graphMap: Record<string, string[]>,
+    options?: SimulatedAnnealingOptions
+  ): AsyncGenerator<PathfindingStepState> {
+    const numWaypoints = options?.numWaypoints ?? 5;
+    const initialTemperature = options?.initialTemperature ?? 1000;
+    const coolingRate = options?.coolingRate ?? 0.95;
+    const minTemperature = options?.minTemperature ?? 0.01;
+    const maxIterations = Math.max(1, Math.ceil(Math.log(minTemperature / initialTemperature) / Math.log(coolingRate)));
+
+    const visitedSet = new Set<string>([startNode.id]);
+    let currentPath = this.buildInitialPath(startNode, targetNode, nodesMap, graphMap);
+    let currentCost = this.calculatePathCost(currentPath, nodesMap);
+    let bestPath = [...currentPath];
+    let bestCost = currentCost;
+    let temperature = initialTemperature;
+
+    const createParentMap = (path: Node[]) => {
+      const map = new Map<string, string>();
+      for (let i = 1; i < path.length; i++) {
+        map.set(path[i].id, path[i - 1].id);
+      }
+      return map;
+    };
+
+    let parentMap = createParentMap(currentPath);
+
+    for (let iteration = 0; iteration < maxIterations && temperature > minTemperature; iteration++) {
+      const currentNode = currentPath[currentPath.length - 1];
+      yield {
+        currentNode,
+        openList: [...currentPath],
+        closedList: new Set(visitedSet),
+        parentMap: new Map(parentMap)
+      };
+
+      const mutationPoint = Math.max(1, Math.min(currentPath.length - 2, Math.floor(Math.random() * (currentPath.length - 1))));
+      const prefix = currentPath.slice(0, mutationPoint + 1);
+      const prefixEnd = prefix[prefix.length - 1];
+      const neighbors = graphMap[prefixEnd.id] ?? [];
+      const candidateNeighbors = neighbors.filter((neighborId) => !prefix.some((node) => node.id === neighborId));
+
+      if (candidateNeighbors.length === 0) {
+        temperature *= coolingRate;
+        continue;
+      }
+
+      const nextId = candidateNeighbors[Math.floor(Math.random() * candidateNeighbors.length)];
+      const nextNode = nodesMap.get(nextId);
+      if (!nextNode) {
+        temperature *= coolingRate;
+        continue;
+      }
+
+      const suffix = this.buildPathByBFS(nextNode.id, targetNode.id, nodesMap, graphMap);
+      if (suffix.length === 0) {
+        temperature *= coolingRate;
+        continue;
+      }
+
+      const suffixNodes = suffix.slice(1).map((id) => nodesMap.get(id)).filter((node): node is Node => node !== undefined);
+      if (suffixNodes.length !== suffix.length - 1) {
+        temperature *= coolingRate;
+        continue;
+      }
+
+      const newPath = [...prefix, ...suffixNodes];
+      const newCost = this.calculatePathCost(newPath, nodesMap);
+      const delta = newCost - currentCost;
+      if (delta < 0 || Math.random() < Math.exp(-delta / temperature)) {
+        currentPath = newPath;
+        currentCost = newCost;
+        visitedSet.add(nextId);
+        parentMap = createParentMap(currentPath);
+
+        if (currentCost < bestCost) {
+          bestCost = currentCost;
+          bestPath = [...currentPath];
+        }
+      }
+
+      temperature *= coolingRate;
+    }
+
+    const finalParentMap = createParentMap(bestPath);
+    yield {
+      currentNode: bestPath[bestPath.length - 1],
+      openList: [...bestPath],
+      closedList: new Set(visitedSet),
+      parentMap: finalParentMap,
+      pathFound: [...bestPath]
+    };
+  }
+
+  private buildInitialPath(
+    startNode: Node,
+    targetNode: Node,
+    nodesMap: Map<string, Node>,
+    graphMap: Record<string, string[]>
+  ): Node[] {
+    const pathIds = this.buildPathByBFS(startNode.id, targetNode.id, nodesMap, graphMap);
+    return pathIds.length > 0 ? pathIds.map((id) => nodesMap.get(id)!).filter(Boolean) : [startNode, targetNode];
+  }
+
+  private buildPathByBFS(
+    startId: string,
+    targetId: string,
+    nodesMap: Map<string, Node>,
+    graphMap: Record<string, string[]>
+  ): string[] {
+    const queue: string[] = [startId];
+    const visited = new Set<string>([startId]);
+    const previous = new Map<string, string>();
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (current === targetId) break;
+
+      for (const neighborId of graphMap[current] ?? []) {
+        if (visited.has(neighborId)) continue;
+        visited.add(neighborId);
+        previous.set(neighborId, current);
+        queue.push(neighborId);
+      }
+    }
+
+    if (!previous.has(targetId) && startId !== targetId) {
+      return [];
+    }
+
+    const path: string[] = [];
+    let currentId = targetId;
+    while (currentId !== startId) {
+      path.unshift(currentId);
+      currentId = previous.get(currentId)!;
+    }
+    path.unshift(startId);
+    return path;
+  }
+
+  private calculatePathCost(path: Node[], nodesMap: Map<string, Node>): number {
+    let cost = 0;
+    for (let i = 0; i < path.length - 1; i++) {
+      cost += this.getDistance(path[i].position, path[i + 1].position);
+    }
+    return cost;
   }
 
   private heuristic(a: Node, b: Node): number {

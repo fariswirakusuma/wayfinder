@@ -3,7 +3,7 @@
   import { SceneManager } from '$lib/three/SceneManager';
   import { PathfindingController } from '$lib/three/manager/PathfindingController';
   import { solvePathStepByStep } from '$lib/services/pathfindingApi';
-  import type { Node as GraphNode, Obstacle, PathfindingAlgorithm } from '$lib/three/types';
+  import type { Node as GraphNode, Obstacle, PathfindingAlgorithm, QLearningOptions, SimulatedAnnealingOptions } from '$lib/three/types';
 
   interface Scene3DProps {
     nodes?: GraphNode[];
@@ -14,6 +14,8 @@
     algorithm?: PathfindingAlgorithm;
     animationSpeedMs?: number;
     cameramode?: 'orbit' | 'first-person';
+    qLearningOptions?: QLearningOptions;
+    simulatedAnnealingOptions?: SimulatedAnnealingOptions;
   }
 
   let {
@@ -24,7 +26,9 @@
     targetNodeId = '',
     algorithm = 'a-star',
     animationSpeedMs = 50,
-    cameramode = 'orbit'
+    cameramode = 'orbit',
+    qLearningOptions = undefined,
+    simulatedAnnealingOptions = undefined
   }: Scene3DProps = $props();
 
   let containerElement: HTMLDivElement;
@@ -84,7 +88,9 @@
         targetNodeId,
         nodes,
         obstacles,
-        stepByStep: true
+        stepByStep: true,
+        qLearningOptions,
+        simulatedAnnealingOptions
       });
 
       const rawGraph = response.graph || (response as any).Graph;
@@ -155,9 +161,12 @@
           generator = controller.solveDijkstraStepByStep(startNode, targetNode, nodesMap, graphAdjacencyMap);
         } else if (algorithm === 'bellman-ford') {
           generator = controller.solveBellmanFordStepByStep(startNode, targetNode, nodesMap, graphAdjacencyMap);
-        }
-        else  {
-          generator = controller.solveQLearningStepByStep(startNode, targetNode, nodesMap, graphAdjacencyMap);
+        } else if (algorithm === 'q-learning') {
+          generator = controller.solveQLearningStepByStep(startNode, targetNode, nodesMap, graphAdjacencyMap, qLearningOptions);
+        } else if (algorithm === 'simulated-annealing') {
+          generator = controller.solveSimulatedAnnealingStepByStep(startNode, targetNode, nodesMap, graphAdjacencyMap, simulatedAnnealingOptions);
+        } else {
+          generator = controller.solveQLearningStepByStep(startNode, targetNode, nodesMap, graphAdjacencyMap, qLearningOptions);
         }
 
         

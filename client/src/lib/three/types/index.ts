@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-export type PathfindingAlgorithm = 'a-star' | 'dijkstra' | 'bellman-ford' | 'q-learning';
+export type PathfindingAlgorithm = 'a-star' | 'dijkstra' | 'bellman-ford' | 'q-learning' | 'simulated-annealing';
 
 export interface Point3D {
   x: number;
@@ -49,6 +49,13 @@ export interface QLearningOptions {
   epsilon?: number;
 }
 
+export interface SimulatedAnnealingOptions {
+  numWaypoints?: number;
+  initialTemperature?: number;
+  coolingRate?: number;
+  minTemperature?: number;
+}
+
 export interface PathfindingRequest {
   startNodeId: string;
   targetNodeId: string;
@@ -56,6 +63,7 @@ export interface PathfindingRequest {
   edges: Edge[];
   obstacles: Obstacle[];
   qLearningOptions?: QLearningOptions;
+  simulatedAnnealingOptions?: SimulatedAnnealingOptions;
 }
 
 export interface PathfindingResponse {
