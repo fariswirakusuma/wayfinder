@@ -98,6 +98,8 @@ export class SceneManager {
     if (!mapChanged) {
       this.startNodeId = startNodeId;
       this.targetNodeId = targetNodeId;
+      this.clearGroup(this.arrowsGroup);
+      this.visitedNodeIds.clear();
       this.updateStartTargetHighlights();
       return;
     }
@@ -336,6 +338,13 @@ export class SceneManager {
 
   public clearPath() {
     this.clearGroup(this.pathGroup);
+  }
+
+  public clearHighlights() {
+    this.clearGroup(this.arrowsGroup);
+    this.clearPath();
+    this.visitedNodeIds.clear();
+    this.updateStartTargetHighlights();
   }
 
   private colorNodesForPath(pathIds: Set<string>) {

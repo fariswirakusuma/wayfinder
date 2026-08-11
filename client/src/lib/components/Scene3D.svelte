@@ -66,8 +66,7 @@
   export function resetHighlight() {
     if (!sceneManager) return;
     hasStepByStepResult = false;
-    sceneManager.renderGraph(nodes, obstacles, startNodeId, targetNodeId);
-    sceneManager.clearPath();
+    sceneManager.clearHighlights();
   }
 
   export function resetCamera() {
