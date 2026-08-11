@@ -76,6 +76,17 @@ Aplikasi ini:
 
 Algoritma yang didukung meliputi A\*, Dijkstra, Bellman-Ford, Q-Learning, dan Simulated Annealing.
 
+---
+## Fitur Utama
+
+- **Representasi Graf Grid:** Struktur peta direpresentasikan sebagai graf $N \times N$ dengan keterhubungan tetangga 4 arah (atas, bawah, kiri, dan kanan).
+- **Algoritma Mandiri (From Scratch):** Implementasi backend dari nol untuk algoritma A\*, Dijkstra, dan Bellman-Ford.
+- **Visualisasi & Animasi 3D:** Visualisasi interaktif lingkungan 3D, lengkap dengan animasi penelusuran simpul (*node expansion*) saat algoritma berjalan.
+- **Kontrol & Interaksi Pengguna:** Kemudahan dalam memilih titik awal/tujuan, mengonfigurasi opsi peta, serta memilih algoritma yang ingin dieksekusi melalui antarmuka pengguna.
+- **Generasi Peta Dinamis:** Fitur pembuatan pola rintangan secara acak dengan konfigurasi ukuran grid $N \times N$ (rentang $10 \times 10$ hingga $60 \times 60$).
+- **Dashboard Analisis Kinerja:** Panel ringkasan pasca-eksekusi yang menampilkan nama algoritma, waktu komputasi (ms), dan total simpul yang dikunjungi.
+- **Mode Kamera First-Person
+
 ## Referensi
 
 - [Three.js loading 3D models](https://threejs.org/manual/#en/loading-3d-models)
