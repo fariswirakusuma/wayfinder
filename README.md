@@ -73,7 +73,7 @@ Aplikasi ini:
 - Menjalankan algoritma pathfinding pada backend
 - Menggambar jalur hasil pencarian di frontend
 
-Algoritma yang didukung meliputi A\*, Dijkstra, dan Bellman-Ford.
+Algoritma yang didukung meliputi A\*, Dijkstra, Bellman-Ford, Q-Learning, dan Simulated Annealing.
 
 ## Referensi
 
