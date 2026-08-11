@@ -1,18 +1,19 @@
 services:
   backend:
-    build:
-      context: ./server
-      dockerfile: Dockerfile
+    image: fariswk/wayfinder-backend:latest
     ports:
       - "5000:5000"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5000
+    restart: always
 
   frontend:
-    build:
-      context: ./client
-      dockerfile: Dockerfile
+    image: fariswk/wayfinder-frontend:latest
     ports:
       - "5173:5173"
+    environment:
+      - BACKEND_URL=http://backend:5000
     depends_on:
       - backend
+    restart: always
