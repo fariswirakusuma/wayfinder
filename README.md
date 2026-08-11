@@ -69,6 +69,7 @@ dotnet publish -c Release -o ./publish
 Aplikasi ini:
 
 - Menghasilkan peta grid dengan labirin DFS atau rintangan acak
+- Mendukung input kamera perangkat untuk membuat pola dinding berdasarkan kecerahan piksel
 - Menampilkan node awal dan tujuan di scene 3D
 - Menjalankan algoritma pathfinding pada backend
 - Menggambar jalur hasil pencarian di frontend
