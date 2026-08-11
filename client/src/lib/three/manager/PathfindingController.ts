@@ -234,8 +234,12 @@ export class PathfindingController {
     nodesMap.forEach((_, id) => distances.set(id, Infinity));
     distances.set(startNode.id, 0);
 
+    const visitedHistory = new Set<string>([startNode.id]);
+    let bestEpisodeParentMap = new Map<string, string>(parentMap);
+
     for (let ep = 0; ep < episodes; ep++) {
       let currId = startNode.id;
+      const episodeVisited = new Set<string>([startNode.id]);
 
       for (let step = 0; step < maxSteps; step++) {
         if (currId === targetNode.id) break;
@@ -260,6 +264,7 @@ export class PathfindingController {
               bestCandidates.push(nextId);
             }
           }
+
           chosenNextId = bestCandidates[Math.floor(Math.random() * bestCandidates.length)];
         }
 
@@ -267,12 +272,7 @@ export class PathfindingController {
         if (!nextNode) break;
 
         const weight = this.getDistance(currNode.position, nextNode.position);
-        
-        // Reward function logic
-        let reward = -weight;
-        if (chosenNextId === targetNode.id) {
-          reward = 100;
-        }
+        let reward = chosenNextId === targetNode.id ? 100 : -weight;
 
         const oldQ = getQ(currId, chosenNextId);
         const maxNextQ = chosenNextId === targetNode.id ? 0 : getMaxQ(chosenNextId);
@@ -284,57 +284,82 @@ export class PathfindingController {
           distances.set(chosenNextId, (distances.get(currId) ?? 0) + weight);
         }
 
+        visitedHistory.add(chosenNextId);
+        episodeVisited.add(chosenNextId);
         currId = chosenNextId;
 
-        // Yield state per beberapa langkah/episode agar rendering tetap optimal
         if (step % 5 === 0 || currId === targetNode.id) {
           yield {
             currentNode: nextNode,
-            distances,
-            parentMap
+            closedList: new Set(visitedHistory),
+            openList: neighbors.map((id) => nodesMap.get(id)).filter((node): node is Node => !!node),
+            parentMap: new Map(parentMap)
           };
         }
       }
+
+      if (currId === targetNode.id) {
+        bestEpisodeParentMap = new Map(parentMap);
+      }
     }
 
-    const path: Node[] = [startNode];
-    let currExtracted = startNode.id;
-    const visitedInExtraction = new Set<string>([startNode.id]);
-    let maxExtractSteps = nodesMap.size;
+    const greedyPath = this.buildGreedyPath(startNode.id, targetNode.id, nodesMap, graphMap, qTable);
+    if (greedyPath.length > 1 && greedyPath[greedyPath.length - 1].id === targetNode.id) {
+      const finalParentMap = new Map<string, string>();
+      for (let i = 1; i < greedyPath.length; i++) {
+        finalParentMap.set(greedyPath[i].id, greedyPath[i - 1].id);
+      }
 
-    while (currExtracted !== targetNode.id && maxExtractSteps-- > 0) {
-      const neighbors = graphMap[currExtracted] ?? [];
+      yield {
+        currentNode: greedyPath[greedyPath.length - 1],
+        closedList: new Set(visitedHistory),
+        parentMap: finalParentMap,
+        pathFound: greedyPath
+      };
+    }
+  }
+
+  private buildGreedyPath(
+    startId: string,
+    targetId: string,
+    nodesMap: Map<string, Node>,
+    graphMap: Record<string, string[]>,
+    qTable: Map<string, number>
+  ): Node[] {
+    const path: Node[] = [];
+    let currentId = startId;
+    const visited = new Set<string>([startId]);
+
+    while (currentId !== targetId) {
+      const neighbors = graphMap[currentId] ?? [];
       let bestNext: string | null = null;
-      let maxQVal = -Infinity;
+      let bestQ = -Infinity;
 
-      for (const nextId of neighbors) {
-        if (visitedInExtraction.has(nextId)) continue;
-        const qVal = getQ(currExtracted, nextId);
-        if (qVal > maxQVal) {
-          maxQVal = qVal;
-          bestNext = nextId;
+      for (const neighborId of neighbors) {
+        if (visited.has(neighborId)) continue;
+        const qVal = qTable.get(`${currentId}_${neighborId}`) ?? 0;
+        if (qVal > bestQ) {
+          bestQ = qVal;
+          bestNext = neighborId;
         }
       }
 
-      if (!bestNext) break;
+      if (!bestNext) {
+        break;
+      }
 
       const nextNode = nodesMap.get(bestNext);
-      if (nextNode) {
-        path.push(nextNode);
-        visitedInExtraction.add(bestNext);
-        currExtracted = bestNext;
+      if (!nextNode) {
+        break;
       }
+
+      path.push(nextNode);
+      visited.add(bestNext);
+      currentId = bestNext;
     }
 
-    const target = nodesMap.get(targetNode.id);
-    if (target && currExtracted === targetNode.id) {
-      yield {
-        currentNode: target,
-        distances,
-        parentMap,
-        pathFound: path
-      };
-    }
+    const startNode = nodesMap.get(startId);
+    return startNode ? [startNode, ...path] : path;
   }
 
   public async *solveSimulatedAnnealingStepByStep(
